@@ -236,6 +236,19 @@ async function buildUserDirectory(includeInactive = false): Promise<Record<strin
   return directory;
 }
 
+async function getUserDirectoryFast(timeoutMs = 2500): Promise<Record<string, string>> {
+  try {
+    return await Promise.race([
+      buildUserDirectory(false),
+      new Promise<Record<string, string>>((resolve) => {
+        setTimeout(() => resolve({}), timeoutMs);
+      }),
+    ]);
+  } catch {
+    return {};
+  }
+}
+
 async function listAuthUsers(includeInactive = false): Promise<any[]> {
   const usersResult = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
   if (usersResult.error) return [];
@@ -783,8 +796,9 @@ function dedupeById<T extends { id: string; createdAt?: string; updatedAt?: stri
 }
 
 async function readProjects() {
-  const rows = await kv.getByPrefix("project:");
-  const projects = rows
+  const rows = await kv.getByPrefixAndRegex("project:", "^project:[0-9a-fA-F-]{36}$");
+  const sourceRows = rows.length > 0 ? rows : await kv.getByPrefix("project:");
+  const projects = sourceRows
     .map((row) => normalizeProjectRecord(unwrapStoredValue(row)))
     .filter((project): project is any => project !== null);
 
@@ -792,8 +806,9 @@ async function readProjects() {
 }
 
 async function readTasks() {
-  const rows = await kv.getByPrefix("task:");
-  const tasks = rows
+  const rows = await kv.getByPrefixAndRegex("task:", "^task:[0-9a-fA-F-]{36}$");
+  const sourceRows = rows.length > 0 ? rows : await kv.getByPrefix("task:");
+  const tasks = sourceRows
     .map((row) => normalizeTaskRecord(unwrapStoredValue(row)))
     .filter((task): task is any => task !== null);
 
@@ -801,8 +816,9 @@ async function readTasks() {
 }
 
 async function readAvSchedules() {
-  const rows = await kv.getByPrefix("av-schedule:");
-  const entries = rows
+  const rows = await kv.getByPrefixAndRegex("av-schedule:", "^av-schedule:[0-9a-fA-F-]{36}$");
+  const sourceRows = rows.length > 0 ? rows : await kv.getByPrefix("av-schedule:");
+  const entries = sourceRows
     .map((row) => normalizeAvScheduleRecord(unwrapStoredValue(row)))
     .filter((entry): entry is any => entry !== null);
 
@@ -810,8 +826,9 @@ async function readAvSchedules() {
 }
 
 async function readTeams() {
-  const rows = await kv.getByPrefix("team:");
-  const teams = rows
+  const rows = await kv.getByPrefixAndRegex("team:", "^team:[0-9a-fA-F-]{36}$");
+  const sourceRows = rows.length > 0 ? rows : await kv.getByPrefix("team:");
+  const teams = sourceRows
     .map((row) => normalizeTeamRecord(unwrapStoredValue(row)))
     .filter((team): team is any => team !== null);
 
@@ -1720,7 +1737,7 @@ app.get("/server/projects", async (c) => {
     if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
 
     const role = getRoleFromUser(user);
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     const projects = (await readProjects())
       .filter((project) => canViewProject(project, user, role))
       .sort((a, b) => {
@@ -1764,7 +1781,7 @@ app.post("/server/projects", async (c) => {
     };
 
     await kv.set(`project:${projectId}`, projectData);
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     const normalizedRecord = normalizeProjectRecord(projectData);
     if (!normalizedRecord) {
       return c.json({ error: "Failed to normalize project data" }, 500);
@@ -1820,7 +1837,7 @@ app.put("/server/projects/:id", async (c) => {
       await kv.mdel(legacyKeys);
     }
 
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     const normalizedRecord = normalizeProjectRecord(updatedProject);
     if (!normalizedRecord) {
       return c.json({ error: "Failed to normalize project data" }, 500);
@@ -1889,7 +1906,7 @@ app.post("/server/projects/:id/notes", async (c) => {
       await kv.mdel(legacyKeys);
     }
 
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     const normalizedRecord = normalizeProjectRecord(updatedProject);
     if (!normalizedRecord) {
       return c.json({ error: "Failed to normalize project data" }, 500);
@@ -1943,7 +1960,7 @@ app.get("/server/tasks", async (c) => {
     if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
 
     const role = getRoleFromUser(user);
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     const projects = (await readProjects()).filter((project) => canViewProject(project, user, role));
     const projectMap = projects.reduce((acc, project) => {
       acc[project.id] = project;
@@ -2000,7 +2017,7 @@ app.post("/server/tasks", async (c) => {
     };
 
     await kv.set(`task:${taskId}`, taskData);
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     const projectMap = projects.reduce((acc, project) => {
       acc[project.id] = project;
       return acc;
@@ -2069,7 +2086,7 @@ app.put("/server/tasks/:id", async (c) => {
       await kv.mdel(legacyKeys);
     }
 
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     const projectMap = projects.reduce((acc, project) => {
       acc[project.id] = project;
       return acc;
@@ -2112,7 +2129,7 @@ app.get("/server/av-schedule", async (c) => {
     const role = getRoleFromUser(user);
     if (!canViewAvSchedule(user, role)) return c.json({ error: "Forbidden" }, 403);
 
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     const entries = (await readAvSchedules())
       .sort((a, b) => {
         const byDate = b.date.localeCompare(a.date);
@@ -2164,7 +2181,7 @@ app.post("/server/av-schedule", async (c) => {
     }
 
     await kv.set(`av-schedule:${entryId}`, nextEntry);
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     return c.json({ entry: serializeAvSchedule(nextEntry, directory) });
   } catch (err) {
     console.error("Create AV schedule error:", err);
@@ -2218,7 +2235,7 @@ app.put("/server/av-schedule/:id", async (c) => {
       await kv.mdel(legacyKeys);
     }
 
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     return c.json({ entry: serializeAvSchedule(nextEntry, directory) });
   } catch (err) {
     console.error("Update AV schedule error:", err);
@@ -2264,7 +2281,7 @@ app.get("/server/quota", async (c) => {
     if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
 
     const role = getRoleFromUser(user);
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     const records = (await readProjects())
       .filter((project) => canViewProject(project, user, role))
       .map((project) => serializeProject(project, directory))
@@ -2373,7 +2390,7 @@ app.get("/server/dashboard/stats", async (c) => {
     if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
 
     const role = getRoleFromUser(user);
-    const directory = await buildUserDirectory(false);
+    const directory = await getUserDirectoryFast();
     const projects = (await readProjects()).filter((project) => canViewProject(project, user, role));
     const projectMap = projects.reduce((acc, project) => {
       acc[project.id] = project;
@@ -2454,4 +2471,5 @@ app.get("/server/dashboard/stats", async (c) => {
 });
 
 Deno.serve(app.fetch);
+
 

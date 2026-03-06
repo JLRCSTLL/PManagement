@@ -157,3 +157,17 @@ export const getByPrefix = async (prefix: string): Promise<any[]> => {
     [`${prefix}%`],
   );
 };
+
+// Search for key-value pairs by prefix plus regex key filter.
+export const getByPrefixAndRegex = async (prefix: string, regex: string): Promise<any[]> => {
+  await ensureTable();
+  return await sql.unsafe<{ key: string; value: any }[]>(
+    `
+      SELECT key, value
+      FROM ${TABLE_NAME}
+      WHERE key LIKE $1
+      AND key ~ $2
+    `,
+    [`${prefix}%`, regex],
+  );
+};
