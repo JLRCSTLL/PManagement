@@ -38,9 +38,9 @@ const riskColors = {
   High: 'bg-red-100 text-red-800',
 };
 
-const currencyFormatter = new Intl.NumberFormat('en-US', {
+const currencyFormatter = new Intl.NumberFormat('en-PH', {
   style: 'currency',
-  currency: 'USD',
+  currency: 'PHP',
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });

@@ -25,9 +25,9 @@ import {
 
 const DEFAULT_TEAMS = ['AV', 'Project Manager'];
 
-const amountFormatter = new Intl.NumberFormat('en-US', {
+const amountFormatter = new Intl.NumberFormat('en-PH', {
   style: 'currency',
-  currency: 'USD',
+  currency: 'PHP',
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
