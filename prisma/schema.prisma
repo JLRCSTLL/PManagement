@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["public", "auth"]
+}
+
+enum UserRole {
+  admin
+  user
+}
+
+enum ProjectPriority {
+  Low
+  Medium
+  High
+  Critical
+}
+
+enum ProjectStatus {
+  NotStarted @map("Not Started")
+  InProgress @map("In Progress")
+  OnHold     @map("On Hold")
+  Completed
+  Cancelled
+}
+
+enum RiskLevel {
+  Low
+  Medium
+  High
+}
+
+enum TaskStatus {
+  NotStarted @map("Not Started")
+  InProgress @map("In Progress")
+  Pending
+  Completed
+  Blocked
+}
+
+model AuthUser {
+  id        String   @id @db.Uuid
+  email     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  profile UserProfile?
+
+  @@map("users")
+  @@schema("auth")
+}
+
+model UserProfile {
+  userId    String   @id @map("user_id") @db.Uuid
+  email     String   @unique
+  fullName  String   @default("") @map("full_name")
+  role      UserRole @default(user)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  authUser AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  managedProjects   Project[]               @relation("AccountManagerProjects")
+  projectAccess     ProjectAccess[]
+  techAssignments   ProjectTechAssignment[]
+  assignedTasks     Task[]                  @relation("TaskAssignedTo")
+  requestedTasks    Task[]                  @relation("TaskRequestedBy")
+  taskAccess        TaskAccess[]
+
+  @@map("user_profiles")
+  @@schema("public")
+}
+
+model Project {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId        String          @map("project_id")
+  projectName      String          @map("project_name")
+  description      String          @default("")
+  accountManagerId String?         @map("account_manager_id") @db.Uuid
+  team             String          @default("")
+  startDate        DateTime?       @map("start_date") @db.Date
+  targetEndDate    DateTime?       @map("target_end_date") @db.Date
+  priority         ProjectPriority
+  status           ProjectStatus
+  riskLevel        RiskLevel       @map("risk_level")
+  progress         Int             @default(0)
+  createdBy        String          @map("created_by") @db.Uuid
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  accountManager UserProfile? @relation("AccountManagerProjects", fields: [accountManagerId], references: [userId], onDelete: SetNull)
+
+  projectAccess         ProjectAccess[]
+  projectTechAssignment ProjectTechAssignment[]
+  referenceLinks        ProjectReferenceLink[]
+  tasks                 Task[]
+
+  @@unique([createdBy, projectId], map: "uq_projects_project_id_per_creator")
+  @@index([accountManagerId], map: "idx_projects_account_manager_id")
+  @@index([status], map: "idx_projects_status")
+  @@index([priority], map: "idx_projects_priority")
+  @@map("projects")
+  @@schema("public")
+}
+
+model ProjectAccess {
+  projectId String   @map("project_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  canView   Boolean  @default(true) @map("can_view")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId], map: "idx_project_access_user_id")
+  @@map("project_access")
+  @@schema("public")
+}
+
+model ProjectTechAssignment {
+  projectId String   @map("project_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId], map: "idx_project_tech_user_id")
+  @@map("project_tech_assignments")
+  @@schema("public")
+}
+
+model ProjectReferenceLink {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  label     String
+  url       String
+  note      String   @default("")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId], map: "idx_project_links_project_id")
+  @@index([projectId, sortOrder], map: "idx_project_links_sort_order")
+  @@map("project_reference_links")
+  @@schema("public")
+}
+
+model Task {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId   String       @map("project_id") @db.Uuid
+  taskId      String       @map("task_id")
+  title       String
+  description String       @default("")
+  assignedTo  String?      @map("assigned_to") @db.Uuid
+  requestedBy String?      @map("requested_by") @db.Uuid
+  priority    ProjectPriority
+  status      TaskStatus
+  startDate   DateTime?    @map("start_date") @db.Date
+  dueDate     DateTime?    @map("due_date") @db.Date
+  progress    Int          @default(0)
+  dependencies String      @default("")
+  notes       String       @default("")
+  referenceLink String     @default("") @map("reference_link")
+  createdBy   String       @map("created_by") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee      UserProfile? @relation("TaskAssignedTo", fields: [assignedTo], references: [userId], onDelete: SetNull)
+  requester     UserProfile? @relation("TaskRequestedBy", fields: [requestedBy], references: [userId], onDelete: SetNull)
+  accessEntries TaskAccess[]
+
+  @@unique([projectId, taskId], map: "uq_tasks_task_id_per_project")
+  @@index([projectId], map: "idx_tasks_project_id")
+  @@index([assignedTo], map: "idx_tasks_assigned_to")
+  @@index([dueDate], map: "idx_tasks_due_date")
+  @@map("tasks")
+  @@schema("public")
+}
+
+model TaskAccess {
+  taskId    String   @map("task_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  canView   Boolean  @default(true) @map("can_view")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId], map: "idx_task_access_user_id")
+  @@map("task_access")
+  @@schema("public")
+}
