@@ -171,3 +171,18 @@ export const getByPrefixAndRegex = async (prefix: string, regex: string): Promis
     [`${prefix}%`, regex],
   );
 };
+
+// Search for key-value pairs by prefix and exact key length.
+export const getByPrefixAndLength = async (prefix: string, keyLength: number, limit = 5000): Promise<any[]> => {
+  await ensureTable();
+  return await sql.unsafe<{ key: string; value: any }[]>(
+    `
+      SELECT key, value
+      FROM ${TABLE_NAME}
+      WHERE key LIKE $1
+      AND char_length(key) = $2
+      LIMIT $3
+    `,
+    [`${prefix}%`, keyLength, limit],
+  );
+};

@@ -40,21 +40,30 @@ export class ApiClient {
   ): Promise<T> {
     const { requiresAuth = true, ...fetchOptions } = options;
     const requestUrl = `${API_BASE_URL}${endpoint}`;
+    const controller = new AbortController();
+    const timeoutMs = 15000;
+    const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
 
     try {
       response = await fetch(requestUrl, {
         ...fetchOptions,
         headers: this.getHeaders(requiresAuth),
+        signal: controller.signal,
       });
     } catch (error: any) {
+      const timedOut = error?.name === 'AbortError';
       const reason =
-        typeof error?.message === 'string' && error.message.trim()
+        timedOut
+          ? `Request timed out after ${Math.round(timeoutMs / 1000)}s`
+          : typeof error?.message === 'string' && error.message.trim()
           ? error.message.trim()
           : 'Network request failed';
       throw new Error(
         `Cannot reach backend API (${requestUrl}). ${reason}. Deploy the Supabase Edge Function \`server\` and verify your Supabase project settings.`,
       );
+    } finally {
+      clearTimeout(timeoutHandle);
     }
 
     if (!response.ok) {

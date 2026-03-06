@@ -547,7 +547,19 @@ async function getAuthUser(c: any) {
   const accessToken = c.req.header('Authorization')?.split(' ')[1];
   if (!accessToken) return null;
 
-  const { data: { user }, error } = await supabase.auth.getUser(accessToken);
+  const authResult = await Promise.race([
+    supabase.auth.getUser(accessToken),
+    new Promise<{ data: { user: null }; error: Error }>((resolve) => {
+      setTimeout(() => {
+        resolve({
+          data: { user: null },
+          error: new Error("Auth lookup timeout"),
+        });
+      }, 3000);
+    }),
+  ]);
+
+  const { data: { user }, error } = authResult;
   if (error || !user?.id) return null;
   if (!isUserActive(user)) return null;
 
@@ -796,9 +808,8 @@ function dedupeById<T extends { id: string; createdAt?: string; updatedAt?: stri
 }
 
 async function readProjects() {
-  const rows = await kv.getByPrefixAndRegex("project:", "^project:[0-9a-fA-F-]{36}$");
-  const sourceRows = rows.length > 0 ? rows : await kv.getByPrefix("project:");
-  const projects = sourceRows
+  const rows = await kv.getByPrefixAndLength("project:", 44, 10000);
+  const projects = rows
     .map((row) => normalizeProjectRecord(unwrapStoredValue(row)))
     .filter((project): project is any => project !== null);
 
@@ -806,9 +817,8 @@ async function readProjects() {
 }
 
 async function readTasks() {
-  const rows = await kv.getByPrefixAndRegex("task:", "^task:[0-9a-fA-F-]{36}$");
-  const sourceRows = rows.length > 0 ? rows : await kv.getByPrefix("task:");
-  const tasks = sourceRows
+  const rows = await kv.getByPrefixAndLength("task:", 41, 10000);
+  const tasks = rows
     .map((row) => normalizeTaskRecord(unwrapStoredValue(row)))
     .filter((task): task is any => task !== null);
 
@@ -816,9 +826,8 @@ async function readTasks() {
 }
 
 async function readAvSchedules() {
-  const rows = await kv.getByPrefixAndRegex("av-schedule:", "^av-schedule:[0-9a-fA-F-]{36}$");
-  const sourceRows = rows.length > 0 ? rows : await kv.getByPrefix("av-schedule:");
-  const entries = sourceRows
+  const rows = await kv.getByPrefixAndLength("av-schedule:", 48, 10000);
+  const entries = rows
     .map((row) => normalizeAvScheduleRecord(unwrapStoredValue(row)))
     .filter((entry): entry is any => entry !== null);
 
@@ -826,9 +835,8 @@ async function readAvSchedules() {
 }
 
 async function readTeams() {
-  const rows = await kv.getByPrefixAndRegex("team:", "^team:[0-9a-fA-F-]{36}$");
-  const sourceRows = rows.length > 0 ? rows : await kv.getByPrefix("team:");
-  const teams = sourceRows
+  const rows = await kv.getByPrefixAndLength("team:", 41, 10000);
+  const teams = rows
     .map((row) => normalizeTeamRecord(unwrapStoredValue(row)))
     .filter((team): team is any => team !== null);
 
