@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router';
-import { CheckSquare, Folder, LayoutDashboard, Settings, Shield, Users, Users2 } from 'lucide-react';
+import { CalendarDays, CheckSquare, Folder, LayoutDashboard, Settings, Shield, Users, Users2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../components/ui/utils';
 
@@ -8,6 +8,7 @@ const baseItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/projects', label: 'Projects', icon: Folder },
   { path: '/tasks', label: 'Tasks', icon: CheckSquare },
+  { path: '/av-schedule', label: 'AV Schedule', icon: CalendarDays },
 ];
 
 export function Sidebar() {

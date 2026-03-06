@@ -71,6 +71,20 @@ export const TaskSchema = z.object({
   updatedAt: z.string(),
 });
 
+export const AvScheduleModeSchema = z.enum(['In Office', 'WFH']);
+
+export const AvScheduleEntrySchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  userName: z.string().optional().default(''),
+  date: z.string().min(1, 'Date is required'),
+  whereabouts: z.string().optional().default(''),
+  workMode: AvScheduleModeSchema,
+  note: z.string().optional().default(''),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
 export const UserSchema = z.object({
   id: z.string(),
   email: z.string().email(),
@@ -84,13 +98,16 @@ export const UserSchema = z.object({
 
 export type Project = z.infer<typeof ProjectSchema>;
 export type Task = z.infer<typeof TaskSchema>;
+export type AvScheduleEntry = z.infer<typeof AvScheduleEntrySchema>;
 export type User = z.infer<typeof UserSchema>;
 export type UserRole = z.infer<typeof UserRoleSchema>;
 export type ProjectReferenceLink = z.infer<typeof ProjectReferenceLinkSchema>;
 export type ProjectNote = z.infer<typeof ProjectNoteSchema>;
+export type AvScheduleMode = z.infer<typeof AvScheduleModeSchema>;
 
 export type ProjectFormData = Omit<Project, 'id' | 'createdBy' | 'createdAt' | 'updatedAt' | 'lastUpdated' | 'techAssignedNames' | 'visibleTeamNames' | 'notes'>;
 export type TaskFormData = Omit<Task, 'id' | 'projectName' | 'assignedToName' | 'requestedByName' | 'daysRemaining' | 'isOverdue' | 'createdBy' | 'createdAt' | 'updatedAt'>;
+export type AvScheduleFormData = Pick<AvScheduleEntry, 'date' | 'whereabouts' | 'workMode' | 'note'>;
 
 export interface DashboardStats {
   totalUsers?: number;

@@ -228,6 +228,46 @@ export class ApiClient {
     });
   }
 
+  // AV Schedule
+  async getAvSchedule() {
+    return this.request<{ entries: any[] }>('/av-schedule', {
+      method: 'GET',
+    });
+  }
+
+  async createAvScheduleEntry(payload: {
+    date: string;
+    whereabouts: string;
+    workMode: 'In Office' | 'WFH';
+    note?: string;
+  }) {
+    return this.request<{ entry: any }>('/av-schedule', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateAvScheduleEntry(
+    id: string,
+    payload: {
+      date: string;
+      whereabouts: string;
+      workMode: 'In Office' | 'WFH';
+      note?: string;
+    },
+  ) {
+    return this.request<{ entry: any }>(`/av-schedule/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteAvScheduleEntry(id: string) {
+    return this.request<{ success: boolean }>(`/av-schedule/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Dashboard
   async getDashboardStats() {
     return this.request<{ stats: any }>('/dashboard/stats', {

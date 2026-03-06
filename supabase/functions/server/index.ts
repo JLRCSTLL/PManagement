@@ -17,6 +17,7 @@ type AppRole = "admin" | "team_lead" | "user";
 
 const URL_PROTOCOLS = new Set(["http:", "https:"]);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RANGE_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)\s*-\s*([01]\d|2[0-3]):([0-5]\d)$/;
 
 const HttpUrlSchema = z
   .string()
@@ -36,6 +37,11 @@ const OptionalDateStringSchema = z
   .optional()
   .default("")
   .refine((value) => value === "" || DATE_PATTERN.test(value), "Date must use YYYY-MM-DD format");
+
+const RequiredDateStringSchema = z
+  .string()
+  .trim()
+  .refine((value) => DATE_PATTERN.test(value), "Date must use YYYY-MM-DD format");
 
 const ProjectReferenceLinkSchema = z.object({
   id: z.string().optional(),
@@ -117,10 +123,33 @@ const TeamMembersPayloadSchema = z.object({
   memberIds: z.array(z.string()).default([]),
 });
 
+const AvSchedulePayloadSchema = z.object({
+  date: RequiredDateStringSchema,
+  whereabouts: z
+    .string()
+    .optional()
+    .default("")
+    .transform((value) => value.trim())
+    .refine((value) => value === "" || TIME_RANGE_PATTERN.test(value), "Schedule time must use HH:mm-HH:mm"),
+  workMode: z.enum(["In Office", "WFH"]),
+  note: z.string().optional().default(""),
+});
+
 function normalizeDate(value: unknown): string {
   if (typeof value !== "string") return "";
   const trimmed = value.trim();
   return DATE_PATTERN.test(trimmed) ? trimmed : "";
+}
+
+function normalizeScheduleTime(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const compact = value.trim().replace(/\s+/g, "");
+  if (!compact) return "";
+  const match = compact.match(TIME_RANGE_PATTERN);
+  if (!match) return "";
+  const start = `${match[1]}:${match[2]}`;
+  const end = `${match[3]}:${match[4]}`;
+  return `${start}-${end}`;
 }
 
 function sanitizeHttpUrl(value: unknown): string {
@@ -346,6 +375,18 @@ const canEditTask = (task: any, project: any, user: any, role: AppRole) => {
 
 const canDeleteTask = (role: AppRole) => role === "admin";
 
+const canViewAvSchedule = (user: any, role: AppRole) => {
+  if (role === "admin" || role === "team_lead") return true;
+  const teams = getUserTeams(user).map((team) => normalizeTeamName(team).toLowerCase());
+  return teams.includes("av");
+};
+
+const canManageAvScheduleEntry = (entry: any, user: any, role: AppRole) => {
+  if (role === "admin" || role === "team_lead") return true;
+  const userId = typeof user?.id === "string" ? user.id : "";
+  return entry.userId === userId;
+};
+
 const canManageUsers = (role: AppRole) => role === "admin";
 const canManageTeams = (role: AppRole) => role === "admin" || role === "team_lead";
 
@@ -558,6 +599,30 @@ function normalizeTaskRecord(task: any) {
   };
 }
 
+function normalizeAvScheduleRecord(entry: any) {
+  if (!entry || typeof entry !== "object") return null;
+  if (typeof entry.id !== "string" || typeof entry.userId !== "string") return null;
+
+  const date = normalizeDate(entry.date);
+  if (!date) return null;
+
+  const whereabouts = normalizeScheduleTime(entry.whereabouts);
+
+  return {
+    ...entry,
+    id: entry.id,
+    userId: entry.userId,
+    date,
+    whereabouts,
+    workMode: entry.workMode === "WFH" ? "WFH" : "In Office",
+    note: typeof entry.note === "string" ? entry.note.trim() : "",
+    createdAt: typeof entry.createdAt === "string" ? entry.createdAt : new Date().toISOString(),
+    updatedAt: typeof entry.updatedAt === "string"
+      ? entry.updatedAt
+      : (typeof entry.createdAt === "string" ? entry.createdAt : new Date().toISOString()),
+  };
+}
+
 function normalizeTeamRecord(team: any) {
   if (!team || typeof team !== "object") return null;
   if (typeof team.id !== "string") return null;
@@ -614,6 +679,15 @@ async function readTasks() {
   return dedupeById(tasks);
 }
 
+async function readAvSchedules() {
+  const rows = await kv.getByPrefix("av-schedule:");
+  const entries = rows
+    .map((row) => normalizeAvScheduleRecord(unwrapStoredValue(row)))
+    .filter((entry): entry is any => entry !== null);
+
+  return dedupeById(entries);
+}
+
 async function readTeams() {
   const rows = await kv.getByPrefix("team:");
   const teams = rows
@@ -648,6 +722,22 @@ async function findTaskStorageKeys(taskId: string): Promise<string[]> {
         key: row?.key,
         match: task?.id === taskId,
         ts: new Date(task?.updatedAt || task?.createdAt || 0).getTime(),
+      };
+    })
+    .filter((entry) => entry.match && typeof entry.key === "string" && entry.key.length > 0)
+    .sort((a, b) => b.ts - a.ts)
+    .map((entry) => entry.key as string);
+}
+
+async function findAvScheduleStorageKeys(entryId: string): Promise<string[]> {
+  const rows = await kv.getByPrefix("av-schedule:");
+  return rows
+    .map((row) => {
+      const entry = normalizeAvScheduleRecord(unwrapStoredValue(row));
+      return {
+        key: row?.key,
+        match: entry?.id === entryId,
+        ts: new Date(entry?.updatedAt || entry?.createdAt || 0).getTime(),
       };
     })
     .filter((entry) => entry.match && typeof entry.key === "string" && entry.key.length > 0)
@@ -722,6 +812,20 @@ function serializeTask(task: any, projectMap: Record<string, any>, directory: Re
     requestedByName: resolveUserName(task.requestedBy || "", directory, task.requestedBy || ""),
     daysRemaining: derived.daysRemaining,
     isOverdue: derived.isOverdue,
+  };
+}
+
+function serializeAvSchedule(entry: any, directory: Record<string, string>) {
+  return {
+    id: entry.id,
+    userId: entry.userId,
+    userName: resolveUserName(entry.userId, directory, "User"),
+    date: entry.date,
+    whereabouts: entry.whereabouts,
+    workMode: entry.workMode === "WFH" ? "WFH" : "In Office",
+    note: entry.note || "",
+    createdAt: entry.createdAt || new Date().toISOString(),
+    updatedAt: entry.updatedAt || entry.createdAt || new Date().toISOString(),
   };
 }
 
@@ -1868,6 +1972,159 @@ app.delete("/server/tasks/:id", async (c) => {
   } catch (err) {
     console.error("Delete task error:", err);
     return c.json({ error: 'Failed to delete task' }, 500);
+  }
+});
+
+// ==================== AV SCHEDULE ROUTES ====================
+
+app.get("/server/av-schedule", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    if (!canViewAvSchedule(user, role)) return c.json({ error: "Forbidden" }, 403);
+
+    const directory = await buildUserDirectory(false);
+    const entries = (await readAvSchedules())
+      .sort((a, b) => {
+        const byDate = b.date.localeCompare(a.date);
+        if (byDate !== 0) return byDate;
+        const aTs = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const bTs = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return bTs - aTs;
+      })
+      .map((entry) => serializeAvSchedule(entry, directory));
+
+    return c.json({ entries });
+  } catch (err) {
+    console.error("Get AV schedule error:", err);
+    return c.json({ error: "Failed to fetch AV schedule" }, 500);
+  }
+});
+
+app.post("/server/av-schedule", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    if (!canViewAvSchedule(user, role)) return c.json({ error: "Forbidden" }, 403);
+
+    const parsed = AvSchedulePayloadSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+
+    const payload = parsed.data;
+    const existing = (await readAvSchedules()).find(
+      (entry) => entry.userId === user.id && entry.date === payload.date,
+    );
+
+    const entryId = existing?.id || crypto.randomUUID();
+    const nextEntry = normalizeAvScheduleRecord({
+      ...(existing || {}),
+      id: entryId,
+      userId: user.id,
+      date: payload.date,
+      whereabouts: payload.whereabouts,
+      workMode: payload.workMode,
+      note: payload.note || "",
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    if (!nextEntry) {
+      return c.json({ error: "Invalid schedule payload" }, 400);
+    }
+
+    await kv.set(`av-schedule:${entryId}`, nextEntry);
+    const directory = await buildUserDirectory(false);
+    return c.json({ entry: serializeAvSchedule(nextEntry, directory) });
+  } catch (err) {
+    console.error("Create AV schedule error:", err);
+    return c.json({ error: "Failed to save AV schedule" }, 500);
+  }
+});
+
+app.put("/server/av-schedule/:id", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    if (!canViewAvSchedule(user, role)) return c.json({ error: "Forbidden" }, 403);
+
+    const entryId = c.req.param("id");
+    const parsed = AvSchedulePayloadSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+
+    const keys = await findAvScheduleStorageKeys(entryId);
+    if (keys.length === 0) {
+      return c.json({ error: "Schedule entry not found" }, 404);
+    }
+
+    const existingRaw = await kv.get(keys[0]);
+    const existing = normalizeAvScheduleRecord(unwrapStoredValue(existingRaw));
+    if (!existing) {
+      return c.json({ error: "Schedule entry not found" }, 404);
+    }
+    if (!canManageAvScheduleEntry(existing, user, role)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const nextEntry = normalizeAvScheduleRecord({
+      ...existing,
+      date: parsed.data.date,
+      whereabouts: parsed.data.whereabouts,
+      workMode: parsed.data.workMode,
+      note: parsed.data.note || "",
+      updatedAt: new Date().toISOString(),
+    });
+    if (!nextEntry) {
+      return c.json({ error: "Invalid schedule payload" }, 400);
+    }
+
+    const canonicalKey = `av-schedule:${entryId}`;
+    await kv.set(canonicalKey, nextEntry);
+    const legacyKeys = keys.filter((key) => key !== canonicalKey);
+    if (legacyKeys.length > 0) {
+      await kv.mdel(legacyKeys);
+    }
+
+    const directory = await buildUserDirectory(false);
+    return c.json({ entry: serializeAvSchedule(nextEntry, directory) });
+  } catch (err) {
+    console.error("Update AV schedule error:", err);
+    return c.json({ error: "Failed to update AV schedule" }, 500);
+  }
+});
+
+app.delete("/server/av-schedule/:id", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    if (!canViewAvSchedule(user, role)) return c.json({ error: "Forbidden" }, 403);
+
+    const entryId = c.req.param("id");
+    const keys = await findAvScheduleStorageKeys(entryId);
+    if (keys.length === 0) {
+      return c.json({ error: "Schedule entry not found" }, 404);
+    }
+
+    const existingRaw = await kv.get(keys[0]);
+    const existing = normalizeAvScheduleRecord(unwrapStoredValue(existingRaw));
+    if (!existing) {
+      return c.json({ error: "Schedule entry not found" }, 404);
+    }
+    if (!canManageAvScheduleEntry(existing, user, role)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    await kv.mdel(keys);
+    return c.json({ success: true });
+  } catch (err) {
+    console.error("Delete AV schedule error:", err);
+    return c.json({ error: "Failed to delete AV schedule" }, 500);
   }
 });
 

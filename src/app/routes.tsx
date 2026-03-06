@@ -8,6 +8,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TeamDepartmentSettingsPage } from "./pages/TeamDepartmentSettingsPage";
+import { AVSchedulePage } from "./pages/AVSchedulePage";
 
 export const router = createBrowserRouter([
   {
@@ -35,6 +36,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <TasksPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "av-schedule",
+        element: (
+          <ProtectedRoute>
+            <AVSchedulePage />
           </ProtectedRoute>
         ),
       },
