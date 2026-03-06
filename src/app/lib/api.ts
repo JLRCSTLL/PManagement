@@ -39,15 +39,22 @@ export class ApiClient {
     options: RequestInit & ApiOptions = {}
   ): Promise<T> {
     const { requiresAuth = true, ...fetchOptions } = options;
+    const requestUrl = `${API_BASE_URL}${endpoint}`;
     let response: Response;
 
     try {
-      response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      response = await fetch(requestUrl, {
         ...fetchOptions,
         headers: this.getHeaders(requiresAuth),
       });
-    } catch {
-      throw new Error('Cannot reach backend API. Deploy the Supabase Edge Function `server` and verify your Supabase project settings.');
+    } catch (error: any) {
+      const reason =
+        typeof error?.message === 'string' && error.message.trim()
+          ? error.message.trim()
+          : 'Network request failed';
+      throw new Error(
+        `Cannot reach backend API (${requestUrl}). ${reason}. Deploy the Supabase Edge Function \`server\` and verify your Supabase project settings.`,
+      );
     }
 
     if (!response.ok) {
@@ -60,7 +67,7 @@ export class ApiClient {
       } else if (error?.error && typeof error.error === 'object') {
         message = JSON.stringify(error.error);
       }
-      throw new Error(message);
+      throw new Error(`[${response.status}] ${message} (${requestUrl})`);
     }
 
     return response.json();
