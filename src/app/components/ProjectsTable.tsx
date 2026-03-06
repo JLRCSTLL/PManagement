@@ -55,18 +55,18 @@ export function ProjectsTable({
   onDelete,
 }: ProjectsTableProps) {
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
-  const clientKeys = useMemo(
-    () => clientGroups.map((group) => group.client),
+  const groupedClientKeys = useMemo(
+    () => clientGroups.filter((group) => group.totalProjects > 1).map((group) => group.client),
     [clientGroups],
   );
 
   useEffect(() => {
-    const validKeys = new Set(clientKeys);
+    const validKeys = new Set(groupedClientKeys);
     setExpandedClients((previous) => {
       const next = new Set(Array.from(previous).filter((key) => validKeys.has(key)));
       return next;
     });
-  }, [clientKeys]);
+  }, [groupedClientKeys]);
 
   function toggleClient(client: string) {
     setExpandedClients((previous) => {
@@ -85,6 +85,138 @@ export function ProjectsTable({
       <div className="text-center py-12">
         <p className="text-gray-500">No projects found</p>
       </div>
+    );
+  }
+
+  function renderProjectRow(project: Project, options?: { nested?: boolean }) {
+    const nested = options?.nested === true;
+    return (
+      <TableRow
+        key={project.id}
+        className="cursor-pointer"
+        onClick={() => onView(project)}
+      >
+        <TableCell>
+          <div className={nested ? 'pl-6' : ''}>
+            <div className="font-medium text-gray-900">{project.projectName}</div>
+            {!nested && (
+              <div className="text-xs text-gray-500 mt-1">{project.client || 'Unassigned Client'}</div>
+            )}
+          </div>
+        </TableCell>
+        <TableCell className="capitalize">{project.projectType || '-'}</TableCell>
+        <TableCell>{project.accountManager || '-'}</TableCell>
+        <TableCell>
+          {project.techAssignedNames?.length ? project.techAssignedNames.join(', ') : '-'}
+        </TableCell>
+        <TableCell>{project.team || '-'}</TableCell>
+        <TableCell>{currencyFormatter.format(project.amount || 0)}</TableCell>
+        <TableCell>
+          <Badge className={priorityColors[project.priority]} variant="secondary">
+            {project.priority}
+          </Badge>
+        </TableCell>
+        <TableCell>
+          <Badge className={statusColors[project.status]} variant="secondary">
+            {project.status}
+          </Badge>
+        </TableCell>
+        <TableCell>
+          <Badge className={riskColors[project.riskLevel]} variant="secondary">
+            {project.riskLevel}
+          </Badge>
+        </TableCell>
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <Progress value={project.progress} className="w-16" />
+            <span className="text-sm text-gray-600">{project.progress}%</span>
+          </div>
+        </TableCell>
+        <TableCell>
+          {project.targetEndDate
+            ? format(new Date(project.targetEndDate), 'MMM dd, yyyy')
+            : '-'}
+        </TableCell>
+        <TableCell>
+          {project.referenceLinks.length === 0 ? (
+            <span className="text-sm text-gray-500">-</span>
+          ) : (
+            <div className="space-y-1">
+              {project.referenceLinks.slice(0, 2).map((link) => (
+                <button
+                  key={link.id || `${project.id}-${link.label}`}
+                  type="button"
+                  className="text-xs text-blue-700 hover:underline block text-left"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    window.open(link.url, '_blank');
+                  }}
+                >
+                  {link.label}
+                </button>
+              ))}
+              {project.referenceLinks.length > 2 && (
+                <span className="text-xs text-gray-500">
+                  +{project.referenceLinks.length - 2} more
+                </span>
+              )}
+            </div>
+          )}
+        </TableCell>
+        {canShowVisibility && (
+          <TableCell className="max-w-[180px]">
+            {project.visibleTeamNames?.length ? (
+              <span className="text-sm text-gray-700">
+                {project.visibleTeamNames.slice(0, 2).join(', ')}
+                {project.visibleTeamNames.length > 2 ? ` +${project.visibleTeamNames.length - 2}` : ''}
+              </span>
+            ) : (
+              <span className="text-sm text-gray-500">-</span>
+            )}
+          </TableCell>
+        )}
+        <TableCell className="text-right">
+          <div className="flex items-center justify-end gap-2">
+            {project.referenceLinks[0]?.url && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  window.open(project.referenceLinks[0].url, '_blank');
+                }}
+              >
+                <ExternalLink className="w-4 h-4" />
+              </Button>
+            )}
+            {canEditProject(project) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEdit(project);
+                }}
+              >
+                <Pencil className="w-4 h-4" />
+              </Button>
+            )}
+            {canDeleteProject(project) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete(project.id);
+                }}
+                className="text-red-600 hover:text-red-700"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
     );
   }
 
@@ -111,6 +243,12 @@ export function ProjectsTable({
         </TableHeader>
         <TableBody>
           {clientGroups.map((group) => {
+            if (group.totalProjects <= 1) {
+              const singleProject = group.projects[0];
+              if (!singleProject) return null;
+              return renderProjectRow(singleProject);
+            }
+
             const isExpanded = expandedClients.has(group.client);
             return (
               <React.Fragment key={group.client}>
@@ -157,131 +295,7 @@ export function ProjectsTable({
                   </TableCell>
                 </TableRow>
 
-                {isExpanded && group.projects.map((project) => (
-                  <TableRow
-                    key={project.id}
-                    className="cursor-pointer"
-                    onClick={() => onView(project)}
-                  >
-                    <TableCell>
-                      <div className="pl-6">
-                        <div className="font-medium text-gray-900">{project.projectName}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="capitalize">{project.projectType || '-'}</TableCell>
-                    <TableCell>{project.accountManager || '-'}</TableCell>
-                    <TableCell>
-                      {project.techAssignedNames?.length ? project.techAssignedNames.join(', ') : '-'}
-                    </TableCell>
-                    <TableCell>{project.team || '-'}</TableCell>
-                    <TableCell>{currencyFormatter.format(project.amount || 0)}</TableCell>
-                    <TableCell>
-                      <Badge className={priorityColors[project.priority]} variant="secondary">
-                        {project.priority}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[project.status]} variant="secondary">
-                        {project.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={riskColors[project.riskLevel]} variant="secondary">
-                        {project.riskLevel}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Progress value={project.progress} className="w-16" />
-                        <span className="text-sm text-gray-600">{project.progress}%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {project.targetEndDate
-                        ? format(new Date(project.targetEndDate), 'MMM dd, yyyy')
-                        : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {project.referenceLinks.length === 0 ? (
-                        <span className="text-sm text-gray-500">-</span>
-                      ) : (
-                        <div className="space-y-1">
-                          {project.referenceLinks.slice(0, 2).map((link) => (
-                            <button
-                              key={link.id || `${project.id}-${link.label}`}
-                              type="button"
-                              className="text-xs text-blue-700 hover:underline block text-left"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                window.open(link.url, '_blank');
-                              }}
-                            >
-                              {link.label}
-                            </button>
-                          ))}
-                          {project.referenceLinks.length > 2 && (
-                            <span className="text-xs text-gray-500">
-                              +{project.referenceLinks.length - 2} more
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </TableCell>
-                    {canShowVisibility && (
-                      <TableCell className="max-w-[180px]">
-                        {project.visibleTeamNames?.length ? (
-                          <span className="text-sm text-gray-700">
-                            {project.visibleTeamNames.slice(0, 2).join(', ')}
-                            {project.visibleTeamNames.length > 2 ? ` +${project.visibleTeamNames.length - 2}` : ''}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-gray-500">-</span>
-                        )}
-                      </TableCell>
-                    )}
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {project.referenceLinks[0]?.url && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              window.open(project.referenceLinks[0].url, '_blank');
-                            }}
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {canEditProject(project) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onEdit(project);
-                            }}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {canDeleteProject(project) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onDelete(project.id);
-                            }}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {isExpanded && group.projects.map((project) => renderProjectRow(project, { nested: true }))}
               </React.Fragment>
             );
           })}
