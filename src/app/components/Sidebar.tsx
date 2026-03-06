@@ -1,12 +1,13 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router';
-import { CalendarDays, CheckSquare, Folder, LayoutDashboard, Settings, Shield, Users, Users2 } from 'lucide-react';
+import { CalendarDays, CheckSquare, Folder, LayoutDashboard, Settings, Shield, Target, Users, Users2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../components/ui/utils';
 
 const baseItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/projects', label: 'Projects', icon: Folder },
+  { path: '/quota', label: 'Quota', icon: Target },
   { path: '/tasks', label: 'Tasks', icon: CheckSquare },
   { path: '/av-schedule', label: 'AV Schedule', icon: CalendarDays },
 ];

@@ -13,3 +13,5 @@ dev-server.log
 Thumbs.db
 
 supabase/.temp/
+
+.vercel

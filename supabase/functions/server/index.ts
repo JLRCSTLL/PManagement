@@ -62,6 +62,7 @@ const ProjectNoteSchema = z.object({
 const ProjectPayloadSchema = z.object({
   projectName: z.string().min(1, "Project name is required"),
   client: z.string().min(1, "Client is required"),
+  projectType: z.enum(["proposal", "project"]),
   description: z.string().optional().default(""),
   accountManager: z.string().min(1, "Account Manager is required"),
   techAssignedIds: z.array(z.string()).optional().default([]),
@@ -139,6 +140,13 @@ function normalizeDate(value: unknown): string {
   if (typeof value !== "string") return "";
   const trimmed = value.trim();
   return DATE_PATTERN.test(trimmed) ? trimmed : "";
+}
+
+function normalizeProjectType(value: unknown): "proposal" | "project" {
+  if (typeof value !== "string") return "project";
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "proposal") return "proposal";
+  return "project";
 }
 
 function normalizeScheduleTime(value: unknown): string {
@@ -271,6 +279,7 @@ const normalizeProjectForStorage = (project: any, userId: string) => {
   return {
     project_name: project.projectName.trim(),
     client: project.client.trim(),
+    project_type: normalizeProjectType(project.projectType),
     description: project.description?.trim() || "",
     account_manager: project.accountManager.trim(),
     tech_assigned: techAssignedIds,
@@ -463,6 +472,43 @@ function buildClientGroups(projects: any[]) {
     .sort((a, b) => a.client.localeCompare(b.client));
 }
 
+function getProjectAmount(project: any): number {
+  const raw = typeof project?.amount === "number" ? project.amount : Number(project?.amount || 0);
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(0, raw);
+}
+
+function buildStatusCounts(projects: any[]): Record<string, number> {
+  return projects.reduce((acc, project) => {
+    const status = typeof project?.status === "string" && project.status.trim()
+      ? project.status.trim()
+      : "Unknown";
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+}
+
+function buildGroupedTotals(projects: any[], selector: (project: any) => string): Array<{ key: string; count: number; amount: number }> {
+  const groups = new Map<string, { key: string; count: number; amount: number }>();
+  for (const project of projects) {
+    const key = selector(project).trim() || "Unassigned";
+    const current = groups.get(key) || { key, count: 0, amount: 0 };
+    current.count += 1;
+    current.amount += getProjectAmount(project);
+    groups.set(key, current);
+  }
+  return Array.from(groups.values()).sort((a, b) => b.amount - a.amount);
+}
+
+function toMonthKey(value: string): string {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const year = parsed.getUTCFullYear();
+  const month = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
 const computeTaskDerived = (task: any) => {
   if (!task?.dueDate || task.status === "Completed") {
     return { daysRemaining: null, isOverdue: false };
@@ -542,6 +588,7 @@ function normalizeProjectRecord(project: any) {
     : typeof project.projectId === "string"
     ? project.projectId.trim()
     : "";
+  const projectType = normalizeProjectType(project.project_type || project.projectType);
   const accountManager = typeof project.account_manager === "string"
     ? project.account_manager.trim()
     : typeof project.accountManager === "string"
@@ -615,6 +662,7 @@ function normalizeProjectRecord(project: any) {
     ...project,
     projectName,
     client,
+    projectType,
     accountManager,
     techAssignedIds,
     visibleTeams,
@@ -845,6 +893,10 @@ function serializeProject(project: any, directory: Record<string, string>) {
     id: project.id,
     projectName: project.projectName || "",
     client: project.client || "",
+    projectType: normalizeProjectType(project.projectType || project.project_type),
+    sourceProposalId: typeof project.sourceProposalId === "string"
+      ? project.sourceProposalId
+      : (typeof project.source_proposal_id === "string" ? project.source_proposal_id : ""),
     description: project.description || "",
     accountManager: project.accountManager || "",
     techAssignedIds,
@@ -2201,6 +2253,114 @@ app.delete("/server/av-schedule/:id", async (c) => {
   } catch (err) {
     console.error("Delete AV schedule error:", err);
     return c.json({ error: "Failed to delete AV schedule" }, 500);
+  }
+});
+
+// ==================== QUOTA ROUTES ====================
+
+app.get("/server/quota", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+
+    const role = getRoleFromUser(user);
+    const directory = await buildUserDirectory(false);
+    const records = (await readProjects())
+      .filter((project) => canViewProject(project, user, role))
+      .map((project) => serializeProject(project, directory))
+      .sort((a, b) => {
+        const aTs = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const bTs = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return bTs - aTs;
+      });
+
+    const proposals = records.filter((project) => project.projectType === "proposal");
+    const projects = records.filter((project) => project.projectType === "project");
+
+    const proposalAmount = proposals.reduce((sum, project) => sum + getProjectAmount(project), 0);
+    const projectAmount = projects.reduce((sum, project) => sum + getProjectAmount(project), 0);
+    const grandTotal = proposalAmount + projectAmount;
+
+    const totalProposals = proposals.length;
+    const totalProjects = projects.length;
+    const activeProjects = projects.filter(
+      (project) => project.status !== "Completed" && project.status !== "Cancelled",
+    ).length;
+    const openProposals = proposals.filter(
+      (project) => project.status !== "Completed" && project.status !== "Cancelled",
+    ).length;
+    const completedProjects = projects.filter((project) => project.status === "Completed").length;
+
+    const convertedProjects = projects.filter(
+      (project) => typeof project.sourceProposalId === "string" && project.sourceProposalId.trim().length > 0,
+    ).length;
+    const conversionRate = totalProposals > 0
+      ? Number(((convertedProjects / totalProposals) * 100).toFixed(2))
+      : 0;
+
+    const monthlyMap = new Map<string, { month: string; proposalAmount: number; projectAmount: number }>();
+    for (const project of records) {
+      const month = toMonthKey(project.startDate || project.createdAt || project.updatedAt || "");
+      if (!month) continue;
+
+      const amount = getProjectAmount(project);
+      const current = monthlyMap.get(month) || { month, proposalAmount: 0, projectAmount: 0 };
+      if (project.projectType === "proposal") {
+        current.proposalAmount += amount;
+      } else {
+        current.projectAmount += amount;
+      }
+      monthlyMap.set(month, current);
+    }
+    const monthlyTrend = Array.from(monthlyMap.values())
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map((entry) => ({
+        ...entry,
+        totalAmount: entry.proposalAmount + entry.projectAmount,
+      }));
+
+    return c.json({
+      summary: {
+        totalProposals,
+        totalProjects,
+        proposalAmount,
+        projectAmount,
+        grandTotal,
+        activeProjects,
+        openProposals,
+        completedProjects,
+        total_proposals: totalProposals,
+        total_projects: totalProjects,
+        proposal_amount: proposalAmount,
+        project_amount: projectAmount,
+        grand_total: grandTotal,
+      },
+      quotaMetrics: {
+        proposalPipelineAmount: proposalAmount,
+        activeDeliveryAmount: projectAmount,
+        conversionCount: convertedProjects,
+        conversionRate,
+        averageProposalValue: totalProposals > 0 ? proposalAmount / totalProposals : 0,
+        averageProjectValue: totalProjects > 0 ? projectAmount / totalProjects : 0,
+      },
+      statusBreakdown: {
+        all: buildStatusCounts(records),
+        proposals: buildStatusCounts(proposals),
+        projects: buildStatusCounts(projects),
+      },
+      groupedTotals: {
+        byClient: buildGroupedTotals(records, (project) => project.client || "Unassigned Client"),
+        byAccountManager: buildGroupedTotals(records, (project) => project.accountManager || "Unassigned"),
+        byTeam: buildGroupedTotals(records, (project) => project.team || "Unassigned"),
+      },
+      monthlyTrend,
+      proposals,
+      projects,
+      records,
+    });
+  } catch (err) {
+    console.error("Get quota data error:", err);
+    return c.json({ error: "Failed to fetch quota data" }, 500);
   }
 });
 

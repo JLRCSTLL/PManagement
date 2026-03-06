@@ -43,11 +43,18 @@ function normalizeProject(raw: any): Project | null {
   if (typeof source.id !== 'string' || !projectName) {
     return null;
   }
+  const rawProjectType = typeof source.projectType === 'string'
+    ? source.projectType.trim().toLowerCase()
+    : typeof source.project_type === 'string'
+    ? source.project_type.trim().toLowerCase()
+    : '';
+  const projectType: Project['projectType'] = rawProjectType === 'proposal' ? 'proposal' : 'project';
 
   return {
     id: source.id,
     projectName,
     client: source.client || source.projectId || '',
+    projectType,
     description: source.description || '',
     accountManager: source.accountManager || source.account_manager || source.accountManagerName || source.owner || '',
     techAssignedIds: Array.isArray(source.techAssignedIds) ? source.techAssignedIds : [],

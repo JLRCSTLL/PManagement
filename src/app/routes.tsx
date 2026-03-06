@@ -9,6 +9,7 @@ import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TeamDepartmentSettingsPage } from "./pages/TeamDepartmentSettingsPage";
 import { AVSchedulePage } from "./pages/AVSchedulePage";
+import { QuotaPage } from "./pages/QuotaPage";
 
 export const router = createBrowserRouter([
   {
@@ -36,6 +37,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <TasksPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "quota",
+        element: (
+          <ProtectedRoute>
+            <QuotaPage />
           </ProtectedRoute>
         ),
       },

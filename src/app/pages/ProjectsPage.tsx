@@ -106,6 +106,12 @@ function normalizeProject(raw: any): Project | null {
   if (typeof source.id !== 'string' || !projectName) {
     return null;
   }
+  const rawProjectType = typeof source.projectType === 'string'
+    ? source.projectType.trim().toLowerCase()
+    : typeof source.project_type === 'string'
+    ? source.project_type.trim().toLowerCase()
+    : '';
+  const projectType: Project['projectType'] = rawProjectType === 'proposal' ? 'proposal' : 'project';
 
   const links = Array.isArray(source.referenceLinks)
     ? source.referenceLinks
@@ -130,6 +136,7 @@ function normalizeProject(raw: any): Project | null {
     id: source.id,
     projectName,
     client: source.client || source.projectId || '',
+    projectType,
     description: source.description || '',
     accountManager: source.accountManager || source.account_manager || source.accountManagerName || source.owner || '',
     techAssignedIds: Array.isArray(source.techAssignedIds) ? source.techAssignedIds : [],
@@ -217,6 +224,7 @@ export function ProjectsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [projectTypeFilter, setProjectTypeFilter] = useState<string>('all');
   const [clientGroupMeta, setClientGroupMeta] = useState<ClientProjectGroupMeta[]>([]);
   const [isGroupedServerSide, setIsGroupedServerSide] = useState(false);
 
@@ -232,6 +240,7 @@ export function ProjectsPage() {
       filtered = filtered.filter((project) =>
         project.projectName.toLowerCase().includes(query) ||
         project.client.toLowerCase().includes(query) ||
+        project.projectType.toLowerCase().includes(query) ||
         (project.accountManager || '').toLowerCase().includes(query) ||
         (project.techAssignedNames || []).join(' ').toLowerCase().includes(query),
       );
@@ -245,11 +254,19 @@ export function ProjectsPage() {
       filtered = filtered.filter((project) => project.priority === priorityFilter);
     }
 
+    if (projectTypeFilter !== 'all') {
+      filtered = filtered.filter((project) => project.projectType === projectTypeFilter);
+    }
+
     return filtered;
-  }, [projects, searchTerm, statusFilter, priorityFilter]);
+  }, [projects, searchTerm, statusFilter, priorityFilter, projectTypeFilter]);
   const hasActiveProjectFilters = useMemo(
-    () => searchTerm.trim().length > 0 || statusFilter !== 'all' || priorityFilter !== 'all',
-    [searchTerm, statusFilter, priorityFilter],
+    () =>
+      searchTerm.trim().length > 0 ||
+      statusFilter !== 'all' ||
+      priorityFilter !== 'all' ||
+      projectTypeFilter !== 'all',
+    [searchTerm, statusFilter, priorityFilter, projectTypeFilter],
   );
   const filteredProjectsById = useMemo(
     () => new Map(filteredProjects.map((project) => [project.id, project])),
@@ -470,7 +487,7 @@ export function ProjectsPage() {
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="md:col-span-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -505,6 +522,16 @@ export function ProjectsPage() {
               <SelectItem value="Medium">Medium</SelectItem>
               <SelectItem value="High">High</SelectItem>
               <SelectItem value="Critical">Critical</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={projectTypeFilter} onValueChange={setProjectTypeFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Project Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Project Types</SelectItem>
+              <SelectItem value="proposal">Proposal</SelectItem>
+              <SelectItem value="project">Project</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -567,6 +594,12 @@ export function ProjectsPage() {
                 <div>
                   <p className="text-xs uppercase tracking-wide text-gray-500">Client</p>
                   <p className="text-sm text-gray-900">{selectedProject.client || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Project Type</p>
+                  <p className="text-sm text-gray-900">
+                    {selectedProject.projectType === 'proposal' ? 'Proposal' : 'Project'}
+                  </p>
                 </div>
               </div>
 

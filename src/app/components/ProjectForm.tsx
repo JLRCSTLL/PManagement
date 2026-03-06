@@ -54,6 +54,7 @@ export function ProjectForm({
       ? {
           ...initialData,
           client: initialData.client || '',
+          projectType: initialData.projectType || 'project',
           accountManager: initialData.accountManager || '',
           techAssignedIds: Array.isArray(initialData.techAssignedIds) ? initialData.techAssignedIds : [],
           visibleTeams: Array.isArray(initialData.visibleTeams) ? initialData.visibleTeams : [],
@@ -64,6 +65,7 @@ export function ProjectForm({
       : {
           projectName: '',
           client: '',
+          projectType: '',
           description: '',
           accountManager: '',
           techAssignedIds: [],
@@ -110,6 +112,7 @@ export function ProjectForm({
   const priority = watch('priority');
   const status = watch('status');
   const riskLevel = watch('riskLevel');
+  const projectType = watch('projectType');
   const team = watch('team') || '';
   const techAssignedIds = watch('techAssignedIds') || [];
   const visibleTeams = watch('visibleTeams') || [];
@@ -158,6 +161,10 @@ export function ProjectForm({
   }
 
   function submitForm(data: ProjectFormData) {
+    const normalizedProjectType =
+      data.projectType === 'proposal' || data.projectType === 'project'
+        ? data.projectType
+        : '';
     const normalizedTechIds = normalizeUnique(data.techAssignedIds || []);
     const normalizedTeam = (data.team || '').trim();
     const normalizedVisibleTeams = normalizeUnique([
@@ -176,6 +183,7 @@ export function ProjectForm({
 
     onSubmit({
       ...data,
+      projectType: normalizedProjectType,
       client: (data.client || '').trim(),
       accountManager: (data.accountManager || '').trim(),
       team: normalizedTeam,
@@ -211,6 +219,34 @@ export function ProjectForm({
             <p className="text-sm text-red-600">{errors.client.message}</p>
           )}
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="projectType">Project Type *</Label>
+        <input
+          type="hidden"
+          {...register('projectType', { required: 'Project Type is required' })}
+        />
+        <Select
+          value={projectType || undefined}
+          onValueChange={(value) =>
+            setValue('projectType', value as 'proposal' | 'project', {
+              shouldDirty: true,
+              shouldValidate: true,
+            })
+          }
+        >
+          <SelectTrigger id="projectType">
+            <SelectValue placeholder="Select Project Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="proposal">Proposal</SelectItem>
+            <SelectItem value="project">Project</SelectItem>
+          </SelectContent>
+        </Select>
+        {errors.projectType && (
+          <p className="text-sm text-red-600">{errors.projectType.message}</p>
+        )}
       </div>
 
       <div className="space-y-2">

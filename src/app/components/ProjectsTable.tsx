@@ -94,6 +94,7 @@ export function ProjectsTable({
         <TableHeader>
           <TableRow>
             <TableHead>Client / Project</TableHead>
+            <TableHead>Project Type</TableHead>
             <TableHead>Account Manager</TableHead>
             <TableHead>Tech Assigned</TableHead>
             <TableHead>Team</TableHead>
@@ -130,6 +131,7 @@ export function ProjectsTable({
                       <span>{group.client} ({group.totalProjects} {group.totalProjects === 1 ? 'Project' : 'Projects'})</span>
                     </button>
                   </TableCell>
+                  <TableCell>-</TableCell>
                   <TableCell className="text-sm text-gray-700">{group.totalProjects} Projects</TableCell>
                   <TableCell>-</TableCell>
                   <TableCell>-</TableCell>
@@ -166,6 +168,7 @@ export function ProjectsTable({
                         <div className="font-medium text-gray-900">{project.projectName}</div>
                       </div>
                     </TableCell>
+                    <TableCell className="capitalize">{project.projectType || '-'}</TableCell>
                     <TableCell>{project.accountManager || '-'}</TableCell>
                     <TableCell>
                       {project.techAssignedNames?.length ? project.techAssignedNames.join(', ') : '-'}

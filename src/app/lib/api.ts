@@ -140,6 +140,21 @@ export class ApiClient {
     });
   }
 
+  async getQuotaData() {
+    return this.request<{
+      summary: any;
+      quotaMetrics: any;
+      statusBreakdown: { all: Record<string, number>; proposals: Record<string, number>; projects: Record<string, number> };
+      groupedTotals: { byClient: any[]; byAccountManager: any[]; byTeam: any[] };
+      monthlyTrend: any[];
+      records: any[];
+      proposals: any[];
+      projects: any[];
+    }>('/quota', {
+      method: 'GET',
+    });
+  }
+
   async createProject(project: any) {
     return this.request<{ project: any }>('/projects', {
       method: 'POST',

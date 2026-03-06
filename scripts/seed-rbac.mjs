@@ -221,6 +221,7 @@ async function main() {
     {
       projectName: 'Platform Security Hardening',
       client: 'SEED-CLIENT-001',
+      projectType: 'project',
       description: 'Harden role-based access and review endpoint visibility.',
       accountManager: 'Alice Manager',
       techAssignedIds: [ensured['bob@taskflow.com']],
@@ -251,6 +252,7 @@ async function main() {
     {
       projectName: 'Data Operations Automation',
       client: 'SEED-CLIENT-002',
+      projectType: 'proposal',
       description: 'Automate recurring data integrity and validation work.',
       accountManager: 'Cara Analyst',
       techAssignedIds: [ensured['bob@taskflow.com']],

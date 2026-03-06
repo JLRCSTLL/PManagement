@@ -19,6 +19,7 @@ export async function seedSampleData() {
     const { project } = await apiClient.createProject({
       projectName: 'RBAC Sample Project',
       client: 'Sample Client Corporation',
+      projectType: 'project',
       description: 'Sample project seeded for role-based visibility testing',
       accountManager: accountManagerName,
       techAssignedIds: [techAssigned.id],

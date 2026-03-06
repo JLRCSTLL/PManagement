@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const UserRoleSchema = z.enum(['admin', 'team_lead', 'user']);
+export const ProjectTypeSchema = z.enum(['proposal', 'project']);
 
 export const ProjectReferenceLinkSchema = z.object({
   id: z.string().optional(),
@@ -22,6 +23,7 @@ export const ProjectSchema = z.object({
   id: z.string(),
   projectName: z.string().min(1, 'Project name is required'),
   client: z.string().min(1, 'Client is required'),
+  projectType: ProjectTypeSchema,
   description: z.string().optional().default(''),
   accountManager: z.string().min(1, 'Account Manager is required'),
   techAssignedIds: z.array(z.string()).default([]),
@@ -101,11 +103,14 @@ export type Task = z.infer<typeof TaskSchema>;
 export type AvScheduleEntry = z.infer<typeof AvScheduleEntrySchema>;
 export type User = z.infer<typeof UserSchema>;
 export type UserRole = z.infer<typeof UserRoleSchema>;
+export type ProjectType = z.infer<typeof ProjectTypeSchema>;
 export type ProjectReferenceLink = z.infer<typeof ProjectReferenceLinkSchema>;
 export type ProjectNote = z.infer<typeof ProjectNoteSchema>;
 export type AvScheduleMode = z.infer<typeof AvScheduleModeSchema>;
 
-export type ProjectFormData = Omit<Project, 'id' | 'createdBy' | 'createdAt' | 'updatedAt' | 'lastUpdated' | 'techAssignedNames' | 'visibleTeamNames' | 'notes'>;
+export type ProjectFormData = Omit<Project, 'id' | 'createdBy' | 'createdAt' | 'updatedAt' | 'lastUpdated' | 'techAssignedNames' | 'visibleTeamNames' | 'notes' | 'projectType'> & {
+  projectType: ProjectType | '';
+};
 export type TaskFormData = Omit<Task, 'id' | 'projectName' | 'assignedToName' | 'requestedByName' | 'daysRemaining' | 'isOverdue' | 'createdBy' | 'createdAt' | 'updatedAt'>;
 export type AvScheduleFormData = Pick<AvScheduleEntry, 'date' | 'whereabouts' | 'workMode' | 'note'>;
 
@@ -142,4 +147,56 @@ export interface DashboardStats {
   tasksByPriority: Record<string, number>;
   projectsByStatus: Record<string, number>;
   projectsByAccountManager?: Record<string, number>;
+}
+
+export interface QuotaSummary {
+  totalProposals: number;
+  totalProjects: number;
+  proposalAmount: number;
+  projectAmount: number;
+  grandTotal: number;
+  activeProjects: number;
+  openProposals: number;
+  completedProjects: number;
+}
+
+export interface QuotaMetrics {
+  proposalPipelineAmount: number;
+  activeDeliveryAmount: number;
+  conversionCount: number;
+  conversionRate: number;
+  averageProposalValue: number;
+  averageProjectValue: number;
+}
+
+export interface QuotaGroupTotal {
+  key: string;
+  count: number;
+  amount: number;
+}
+
+export interface QuotaMonthlyTrend {
+  month: string;
+  proposalAmount: number;
+  projectAmount: number;
+  totalAmount: number;
+}
+
+export interface QuotaResponse {
+  summary: QuotaSummary;
+  quotaMetrics: QuotaMetrics;
+  statusBreakdown: {
+    all: Record<string, number>;
+    proposals: Record<string, number>;
+    projects: Record<string, number>;
+  };
+  groupedTotals: {
+    byClient: QuotaGroupTotal[];
+    byAccountManager: QuotaGroupTotal[];
+    byTeam: QuotaGroupTotal[];
+  };
+  monthlyTrend: QuotaMonthlyTrend[];
+  records: Project[];
+  proposals: Project[];
+  projects: Project[];
 }
