@@ -135,7 +135,7 @@ export class ApiClient {
 
   // Projects
   async getProjects() {
-    return this.request<{ projects: any[] }>('/projects', {
+    return this.request<{ projects: any[]; groupedServerSide?: boolean; clientGroups?: any[] }>('/projects', {
       method: 'GET',
     });
   }

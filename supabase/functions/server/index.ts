@@ -390,6 +390,79 @@ const canManageAvScheduleEntry = (entry: any, user: any, role: AppRole) => {
 const canManageUsers = (role: AppRole) => role === "admin";
 const canManageTeams = (role: AppRole) => role === "admin" || role === "team_lead";
 
+const PROJECT_PRIORITY_ORDER: Record<string, number> = {
+  Low: 1,
+  Medium: 2,
+  High: 3,
+  Critical: 4,
+};
+
+function getHighestProjectPriority(priorities: string[]): "Low" | "Medium" | "High" | "Critical" {
+  let highest: "Low" | "Medium" | "High" | "Critical" = "Low";
+  for (const value of priorities) {
+    if (
+      (value === "Low" || value === "Medium" || value === "High" || value === "Critical") &&
+      PROJECT_PRIORITY_ORDER[value] > PROJECT_PRIORITY_ORDER[highest]
+    ) {
+      highest = value;
+    }
+  }
+  return highest;
+}
+
+function buildClientGroups(projects: any[]) {
+  const groups = new Map<
+    string,
+    {
+      client: string;
+      projectIds: string[];
+      totalProjects: number;
+      totalAmount: number;
+      highestPriority: "Low" | "Medium" | "High" | "Critical";
+      totalProgress: number;
+    }
+  >();
+
+  for (const project of projects) {
+    const client = typeof project.client === "string" && project.client.trim()
+      ? project.client.trim()
+      : "Unassigned Client";
+    const existing = groups.get(client);
+    const amount = typeof project.amount === "number" ? project.amount : Number(project.amount) || 0;
+    const progress = typeof project.progress === "number" ? project.progress : Number(project.progress) || 0;
+    const priority = typeof project.priority === "string" ? project.priority : "Low";
+
+    if (!existing) {
+      groups.set(client, {
+        client,
+        projectIds: [project.id],
+        totalProjects: 1,
+        totalAmount: amount,
+        highestPriority: getHighestProjectPriority([priority]),
+        totalProgress: progress,
+      });
+      continue;
+    }
+
+    existing.projectIds.push(project.id);
+    existing.totalProjects += 1;
+    existing.totalAmount += amount;
+    existing.highestPriority = getHighestProjectPriority([existing.highestPriority, priority]);
+    existing.totalProgress += progress;
+  }
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      client: group.client,
+      projectIds: group.projectIds,
+      totalProjects: group.totalProjects,
+      totalAmount: group.totalAmount,
+      highestPriority: group.highestPriority,
+      overallProgress: group.totalProjects > 0 ? Math.round(group.totalProgress / group.totalProjects) : 0,
+    }))
+    .sort((a, b) => a.client.localeCompare(b.client));
+}
+
 const computeTaskDerived = (task: any) => {
   if (!task?.dueDate || task.status === "Completed") {
     return { daysRemaining: null, isOverdue: false };
@@ -1605,7 +1678,10 @@ app.get("/server/projects", async (c) => {
       })
       .map((project) => serializeProject(project, directory));
 
-    return c.json({ projects });
+    const groupedServerSide = projects.length > 1000;
+    const clientGroups = groupedServerSide ? buildClientGroups(projects) : undefined;
+
+    return c.json({ projects, groupedServerSide, clientGroups });
   } catch (err) {
     console.error("Get projects error:", err);
     return c.json({ error: 'Failed to fetch projects' }, 500);

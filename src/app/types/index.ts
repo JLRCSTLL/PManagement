@@ -109,6 +109,24 @@ export type ProjectFormData = Omit<Project, 'id' | 'createdBy' | 'createdAt' | '
 export type TaskFormData = Omit<Task, 'id' | 'projectName' | 'assignedToName' | 'requestedByName' | 'daysRemaining' | 'isOverdue' | 'createdBy' | 'createdAt' | 'updatedAt'>;
 export type AvScheduleFormData = Pick<AvScheduleEntry, 'date' | 'whereabouts' | 'workMode' | 'note'>;
 
+export interface ClientProjectGroupMeta {
+  client: string;
+  projectIds: string[];
+  totalProjects: number;
+  totalAmount: number;
+  highestPriority: Project['priority'];
+  overallProgress: number;
+}
+
+export interface ClientProjectGroup {
+  client: string;
+  totalProjects: number;
+  totalAmount: number;
+  highestPriority: Project['priority'];
+  overallProgress: number;
+  projects: Project[];
+}
+
 export interface DashboardStats {
   totalUsers?: number;
   totalProjects: number;

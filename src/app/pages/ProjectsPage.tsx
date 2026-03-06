@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../lib/api';
 import { canCreateProject, canDeleteProject, canEditProject, canManageTeamSettings } from '../lib/permissions';
-import { Project, ProjectFormData, User } from '../types';
+import { ClientProjectGroup, ClientProjectGroupMeta, Project, ProjectFormData, User } from '../types';
 import { ProjectForm } from '../components/ProjectForm';
 import { ProjectsTable } from '../components/ProjectsTable';
 import { Button } from '../components/ui/button';
@@ -34,6 +34,55 @@ const amountFormatter = new Intl.NumberFormat('en-US', {
 
 function normalizeUnique(values: string[]): string[] {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+const priorityOrder: Record<Project['priority'], number> = {
+  Low: 1,
+  Medium: 2,
+  High: 3,
+  Critical: 4,
+};
+
+function getHighestPriority(values: Project['priority'][]): Project['priority'] {
+  let highest: Project['priority'] = 'Low';
+  for (const value of values) {
+    if (priorityOrder[value] > priorityOrder[highest]) {
+      highest = value;
+    }
+  }
+  return highest;
+}
+
+function getClientName(project: Project): string {
+  const client = (project.client || '').trim();
+  return client || 'Unassigned Client';
+}
+
+function buildClientGroups(projects: Project[]): ClientProjectGroup[] {
+  const groupMap = new Map<string, Project[]>();
+  for (const project of projects) {
+    const client = getClientName(project);
+    const list = groupMap.get(client) || [];
+    list.push(project);
+    groupMap.set(client, list);
+  }
+
+  return Array.from(groupMap.entries())
+    .map(([client, groupedProjects]) => {
+      const totalProjects = groupedProjects.length;
+      const totalAmount = groupedProjects.reduce((sum, project) => sum + (project.amount || 0), 0);
+      const priorities = groupedProjects.map((project) => project.priority);
+      const totalProgress = groupedProjects.reduce((sum, project) => sum + (project.progress || 0), 0);
+      return {
+        client,
+        totalProjects,
+        totalAmount,
+        highestPriority: getHighestPriority(priorities),
+        overallProgress: totalProjects > 0 ? Math.round(totalProgress / totalProjects) : 0,
+        projects: groupedProjects,
+      };
+    })
+    .sort((a, b) => a.client.localeCompare(b.client));
 }
 
 function unwrapValue(input: any): any {
@@ -112,6 +161,25 @@ function normalizeProject(raw: any): Project | null {
   };
 }
 
+function normalizeClientGroupMeta(raw: any): ClientProjectGroupMeta | null {
+  if (!raw || typeof raw !== 'object') return null;
+  if (typeof raw.client !== 'string' || !Array.isArray(raw.projectIds)) return null;
+  const highestPriority = raw.highestPriority;
+  if (highestPriority !== 'Low' && highestPriority !== 'Medium' && highestPriority !== 'High' && highestPriority !== 'Critical') {
+    return null;
+  }
+
+  const projectIds = raw.projectIds.filter((value: any) => typeof value === 'string');
+  return {
+    client: raw.client.trim() || 'Unassigned Client',
+    projectIds,
+    totalProjects: typeof raw.totalProjects === 'number' ? raw.totalProjects : projectIds.length,
+    totalAmount: typeof raw.totalAmount === 'number' ? raw.totalAmount : 0,
+    highestPriority,
+    overallProgress: typeof raw.overallProgress === 'number' ? raw.overallProgress : 0,
+  };
+}
+
 function normalizeUser(raw: any): User | null {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return null;
   const name = raw.name || raw.fullName || raw.email || 'User';
@@ -149,6 +217,8 @@ export function ProjectsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [clientGroupMeta, setClientGroupMeta] = useState<ClientProjectGroupMeta[]>([]);
+  const [isGroupedServerSide, setIsGroupedServerSide] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -177,6 +247,37 @@ export function ProjectsPage() {
 
     return filtered;
   }, [projects, searchTerm, statusFilter, priorityFilter]);
+  const hasActiveProjectFilters = useMemo(
+    () => searchTerm.trim().length > 0 || statusFilter !== 'all' || priorityFilter !== 'all',
+    [searchTerm, statusFilter, priorityFilter],
+  );
+  const filteredProjectsById = useMemo(
+    () => new Map(filteredProjects.map((project) => [project.id, project])),
+    [filteredProjects],
+  );
+  const groupedProjects = useMemo<ClientProjectGroup[]>(() => {
+    if (!hasActiveProjectFilters && isGroupedServerSide && clientGroupMeta.length > 0) {
+      return clientGroupMeta
+        .map((meta) => {
+          const clientProjects = meta.projectIds
+            .map((id) => filteredProjectsById.get(id))
+            .filter((project): project is Project => Boolean(project));
+
+          if (clientProjects.length === 0) return null;
+          return {
+            client: meta.client,
+            totalProjects: meta.totalProjects,
+            totalAmount: meta.totalAmount,
+            highestPriority: meta.highestPriority,
+            overallProgress: meta.overallProgress,
+            projects: clientProjects,
+          };
+        })
+        .filter((group): group is ClientProjectGroup => group !== null);
+    }
+
+    return buildClientGroups(filteredProjects);
+  }, [hasActiveProjectFilters, isGroupedServerSide, clientGroupMeta, filteredProjectsById, filteredProjects]);
   const availableTeams = useMemo(
     () =>
       normalizeUnique([
@@ -206,12 +307,17 @@ export function ProjectsPage() {
       const normalizedProjects = (projectsResponse.projects || [])
         .map(normalizeProject)
         .filter((project): project is Project => project !== null);
+      const normalizedClientGroups = (projectsResponse.clientGroups || [])
+        .map(normalizeClientGroupMeta)
+        .filter((group): group is ClientProjectGroupMeta => group !== null);
       const normalizedUsers = (usersResponse.users || [])
         .map(normalizeUser)
         .filter((entry): entry is User => entry !== null && entry.isActive);
 
       setProjects(normalizedProjects);
       setUsers(normalizedUsers);
+      setClientGroupMeta(normalizedClientGroups);
+      setIsGroupedServerSide(projectsResponse.groupedServerSide === true && normalizedClientGroups.length > 0);
     } catch (error: any) {
       toast.error(error.message || 'Failed to load projects');
       console.error('Load projects error:', error);
@@ -406,7 +512,7 @@ export function ProjectsPage() {
 
       <div className="bg-white rounded-lg shadow">
         <ProjectsTable
-          projects={filteredProjects}
+          clientGroups={groupedProjects}
           canShowVisibility={canManageVisibility}
           canEditProject={(project) => canEditProject(role, project, user?.id)}
           canDeleteProject={(_project) => canDeleteProject(role)}
