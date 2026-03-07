@@ -1,4 +1,4 @@
-import { projectId, publicAnonKey } from '/utils/supabase/info';
+import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/server`;
 
@@ -40,46 +40,67 @@ export class ApiClient {
   ): Promise<T> {
     const { requiresAuth = true, ...fetchOptions } = options;
     const requestUrl = `${API_BASE_URL}${endpoint}`;
-    const controller = new AbortController();
+    const method = (fetchOptions.method || 'GET').toUpperCase();
+    const isRetryable = method === 'GET' || method === 'HEAD';
+    const maxAttempts = isRetryable ? 2 : 1;
     const timeoutMs = 15000;
-    const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
-    let response: Response;
+    let lastError: Error | null = null;
 
-    try {
-      response = await fetch(requestUrl, {
-        ...fetchOptions,
-        headers: this.getHeaders(requiresAuth),
-        signal: controller.signal,
-      });
-    } catch (error: any) {
-      const timedOut = error?.name === 'AbortError';
-      const reason =
-        timedOut
-          ? `Request timed out after ${Math.round(timeoutMs / 1000)}s`
-          : typeof error?.message === 'string' && error.message.trim()
-          ? error.message.trim()
-          : 'Network request failed';
-      throw new Error(
-        `Cannot reach backend API (${requestUrl}). ${reason}. Deploy the Supabase Edge Function \`server\` and verify your Supabase project settings.`,
-      );
-    } finally {
-      clearTimeout(timeoutHandle);
-    }
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const controller = new AbortController();
+      const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }));
-      let message = 'Request failed';
-      if (typeof error?.error === 'string') {
-        message = error.error;
-      } else if (typeof error?.message === 'string') {
-        message = error.message;
-      } else if (error?.error && typeof error.error === 'object') {
-        message = JSON.stringify(error.error);
+      try {
+        const response = await fetch(requestUrl, {
+          ...fetchOptions,
+          headers: this.getHeaders(requiresAuth),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: 'Request failed' }));
+          let message = 'Request failed';
+          if (typeof error?.error === 'string') {
+            message = error.error;
+          } else if (typeof error?.message === 'string') {
+            message = error.message;
+          } else if (error?.error && typeof error.error === 'object') {
+            message = JSON.stringify(error.error);
+          }
+
+          const requestError = new Error(`[${response.status}] ${message} (${requestUrl})`);
+          const shouldRetry = isRetryable && attempt < maxAttempts && response.status >= 500;
+          if (shouldRetry) {
+            await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+            continue;
+          }
+          throw requestError;
+        }
+
+        return response.json();
+      } catch (error: any) {
+        const timedOut = error?.name === 'AbortError';
+        const reason =
+          timedOut
+            ? `Request timed out after ${Math.round(timeoutMs / 1000)}s`
+            : typeof error?.message === 'string' && error.message.trim()
+            ? error.message.trim()
+            : 'Network request failed';
+        lastError = new Error(
+          `Cannot reach backend API (${requestUrl}). ${reason}. Deploy the Supabase Edge Function \`server\` and verify your Supabase project settings.`,
+        );
+
+        const shouldRetry = isRetryable && attempt < maxAttempts;
+        if (!shouldRetry) {
+          throw lastError;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+      } finally {
+        clearTimeout(timeoutHandle);
       }
-      throw new Error(`[${response.status}] ${message} (${requestUrl})`);
     }
 
-    return response.json();
+    throw lastError || new Error(`Cannot reach backend API (${requestUrl}).`);
   }
 
   // Auth
