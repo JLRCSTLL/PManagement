@@ -25,6 +25,7 @@ export const ProjectSchema = z.object({
   client: z.string().min(1, 'Client is required'),
   projectType: ProjectTypeSchema,
   description: z.string().optional().default(''),
+  driveLink: z.string().optional().default(''),
   accountManager: z.string().min(1, 'Account Manager is required'),
   techAssignedIds: z.array(z.string()).default([]),
   techAssignedNames: z.array(z.string()).optional().default([]),

@@ -32,6 +32,13 @@ const HttpUrlSchema = z
     }
   }, "URL must use http or https");
 
+const OptionalHttpUrlSchema = z
+  .string()
+  .optional()
+  .default("")
+  .transform((value) => value.trim())
+  .refine((value) => value === "" || HttpUrlSchema.safeParse(value).success, "Valid URL is required");
+
 const OptionalDateStringSchema = z
   .string()
   .optional()
@@ -64,6 +71,7 @@ const ProjectPayloadSchema = z.object({
   client: z.string().min(1, "Client is required"),
   projectType: z.enum(["proposal", "project"]),
   description: z.string().optional().default(""),
+  driveLink: OptionalHttpUrlSchema,
   accountManager: z.string().min(1, "Account Manager is required"),
   techAssignedIds: z.array(z.string()).optional().default([]),
   visibleTeams: z.array(z.string()).optional().default([]),
@@ -294,6 +302,7 @@ const normalizeProjectForStorage = (project: any, userId: string) => {
     client: project.client.trim(),
     project_type: normalizeProjectType(project.projectType),
     description: project.description?.trim() || "",
+    drive_link: sanitizeHttpUrl(project.driveLink),
     account_manager: project.accountManager.trim(),
     tech_assigned: techAssignedIds,
     visible_teams: visibleTeams,
@@ -614,6 +623,7 @@ function normalizeProjectRecord(project: any) {
     ? project.projectId.trim()
     : "";
   const projectType = normalizeProjectType(project.project_type || project.projectType);
+  const driveLink = sanitizeHttpUrl(project.drive_link || project.driveLink);
   const accountManager = typeof project.account_manager === "string"
     ? project.account_manager.trim()
     : typeof project.accountManager === "string"
@@ -688,6 +698,7 @@ function normalizeProjectRecord(project: any) {
     projectName,
     client,
     projectType,
+    driveLink,
     accountManager,
     techAssignedIds,
     visibleTeams,
@@ -923,6 +934,11 @@ function serializeProject(project: any, directory: Record<string, string>) {
       ? project.sourceProposalId
       : (typeof project.source_proposal_id === "string" ? project.source_proposal_id : ""),
     description: project.description || "",
+    driveLink: sanitizeHttpUrl(
+      typeof project.driveLink === "string"
+        ? project.driveLink
+        : (typeof project.drive_link === "string" ? project.drive_link : ""),
+    ),
     accountManager: project.accountManager || "",
     techAssignedIds,
     techAssignedNames,

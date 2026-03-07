@@ -55,6 +55,7 @@ export function ProjectForm({
           ...initialData,
           client: initialData.client || '',
           projectType: initialData.projectType || 'project',
+          driveLink: initialData.driveLink || '',
           accountManager: initialData.accountManager || '',
           techAssignedIds: Array.isArray(initialData.techAssignedIds) ? initialData.techAssignedIds : [],
           visibleTeams: Array.isArray(initialData.visibleTeams) ? initialData.visibleTeams : [],
@@ -67,6 +68,7 @@ export function ProjectForm({
           client: '',
           projectType: '',
           description: '',
+          driveLink: '',
           accountManager: '',
           techAssignedIds: [],
           visibleTeams: [],
@@ -180,11 +182,13 @@ export function ProjectForm({
         sortOrder: index,
       }))
       .filter((link) => link.label && link.url);
+    const normalizedDriveLink = (data.driveLink || '').trim();
 
     onSubmit({
       ...data,
       projectType: normalizedProjectType,
       client: (data.client || '').trim(),
+      driveLink: normalizedDriveLink,
       accountManager: (data.accountManager || '').trim(),
       team: normalizedTeam,
       amount: Number.isFinite(data.amount) ? Math.max(0, data.amount) : initialAmount,
@@ -252,6 +256,32 @@ export function ProjectForm({
       <div className="space-y-2">
         <Label htmlFor="description">Description</Label>
         <Textarea id="description" {...register('description')} rows={3} />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="driveLink">Project Drive Link</Label>
+        <Input
+          id="driveLink"
+          placeholder="https://drive.google.com/..."
+          {...register('driveLink', {
+            validate: (value) => {
+              const trimmed = (value || '').trim();
+              if (!trimmed) return true;
+              try {
+                const parsed = new URL(trimmed);
+                if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+                  return true;
+                }
+              } catch {
+                // no-op
+              }
+              return 'Enter a valid http/https URL';
+            },
+          })}
+        />
+        {errors.driveLink && (
+          <p className="text-sm text-red-600">{errors.driveLink.message}</p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">

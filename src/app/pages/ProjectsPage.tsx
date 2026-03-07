@@ -138,6 +138,11 @@ function normalizeProject(raw: any): Project | null {
     client: source.client || source.projectId || '',
     projectType,
     description: source.description || '',
+    driveLink: typeof source.driveLink === 'string'
+      ? source.driveLink
+      : typeof source.drive_link === 'string'
+      ? source.drive_link
+      : '',
     accountManager: source.accountManager || source.account_manager || source.accountManagerName || source.owner || '',
     techAssignedIds: Array.isArray(source.techAssignedIds) ? source.techAssignedIds : [],
     techAssignedNames: Array.isArray(source.techAssignedNames) ? source.techAssignedNames : [],
@@ -221,6 +226,8 @@ export function ProjectsPage() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [noteInput, setNoteInput] = useState('');
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [driveLinkInput, setDriveLinkInput] = useState('');
+  const [isSavingDriveLink, setIsSavingDriveLink] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -407,6 +414,7 @@ export function ProjectsPage() {
 
   function handleView(project: Project) {
     setSelectedProject(project);
+    setDriveLinkInput(project.driveLink || '');
     setIsDetailsOpen(true);
   }
 
@@ -427,6 +435,48 @@ export function ProjectsPage() {
       toast.error(error.message || 'Failed to add note');
     } finally {
       setIsSavingNote(false);
+    }
+  }
+
+  function isValidHttpUrl(value: string) {
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  async function handleSaveDriveLink() {
+    if (!selectedProject?.id) return;
+    if (!canEditProject(role, selectedProject, user?.id)) {
+      toast.error('You do not have permission to edit this project');
+      return;
+    }
+
+    const trimmed = driveLinkInput.trim();
+    if (trimmed && !isValidHttpUrl(trimmed)) {
+      toast.error('Please enter a valid http/https URL');
+      return;
+    }
+
+    setIsSavingDriveLink(true);
+    try {
+      const { project } = await apiClient.updateProject(selectedProject.id, {
+        ...selectedProject,
+        driveLink: trimmed,
+      });
+      const normalized = normalizeProject(project);
+      if (normalized) {
+        setProjects((prev) => prev.map((entry) => (entry.id === normalized.id ? normalized : entry)));
+        setSelectedProject(normalized);
+        setDriveLinkInput(normalized.driveLink || '');
+      }
+      toast.success('Drive link saved');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save drive link');
+    } finally {
+      setIsSavingDriveLink(false);
     }
   }
 
@@ -576,6 +626,7 @@ export function ProjectsPage() {
           if (!open) {
             setSelectedProject(null);
             setNoteInput('');
+            setDriveLinkInput('');
           }
         }}
       >
@@ -606,6 +657,41 @@ export function ProjectsPage() {
               <div>
                 <p className="text-xs uppercase tracking-wide text-gray-500">Description</p>
                 <p className="text-sm text-gray-900 whitespace-pre-wrap">{selectedProject.description || '-'}</p>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Project Drive Link</p>
+                <Input
+                  value={driveLinkInput}
+                  onChange={(event) => setDriveLinkInput(event.target.value)}
+                  placeholder="https://drive.google.com/..."
+                  disabled={!canEditProject(role, selectedProject, user?.id)}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs text-gray-500 truncate">
+                    {selectedProject.driveLink ? selectedProject.driveLink : 'No drive link set.'}
+                  </div>
+                  <div className="flex gap-2">
+                    {selectedProject.driveLink ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(selectedProject.driveLink, '_blank')}
+                      >
+                        Open Link
+                      </Button>
+                    ) : null}
+                    {canEditProject(role, selectedProject, user?.id) ? (
+                      <Button
+                        size="sm"
+                        onClick={handleSaveDriveLink}
+                        disabled={isSavingDriveLink}
+                      >
+                        {isSavingDriveLink ? 'Saving...' : 'Save Link'}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

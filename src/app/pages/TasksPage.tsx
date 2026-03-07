@@ -56,6 +56,11 @@ function normalizeProject(raw: any): Project | null {
     client: source.client || source.projectId || '',
     projectType,
     description: source.description || '',
+    driveLink: typeof source.driveLink === 'string'
+      ? source.driveLink
+      : typeof source.drive_link === 'string'
+      ? source.drive_link
+      : '',
     accountManager: source.accountManager || source.account_manager || source.accountManagerName || source.owner || '',
     techAssignedIds: Array.isArray(source.techAssignedIds) ? source.techAssignedIds : [],
     techAssignedNames: Array.isArray(source.techAssignedNames) ? source.techAssignedNames : [],

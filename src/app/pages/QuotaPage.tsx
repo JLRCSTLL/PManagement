@@ -125,6 +125,11 @@ function normalizeProject(raw: any): Project | null {
     client: source.client || '',
     projectType,
     description: source.description || '',
+    driveLink: typeof source.driveLink === 'string'
+      ? source.driveLink
+      : typeof source.drive_link === 'string'
+      ? source.drive_link
+      : '',
     accountManager: source.accountManager || source.account_manager || '',
     techAssignedIds: Array.isArray(source.techAssignedIds) ? source.techAssignedIds : [],
     techAssignedNames: Array.isArray(source.techAssignedNames) ? source.techAssignedNames : [],
