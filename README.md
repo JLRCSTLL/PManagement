@@ -1,6 +1,6 @@
-# TaskFlow RBAC Dashboard
+# AV CISC RBAC Dashboard
 
-TaskFlow is a React + Supabase project/task dashboard with role-based visibility, admin user controls, and project/task assignment workflows.
+AV CISC is a React + Supabase project/task dashboard with role-based visibility, admin user controls, and project/task assignment workflows.
 
 ## Stack
 

@@ -31,27 +31,6 @@ export function AuthPage() {
       toast.success('Signed in successfully');
       navigate('/');
     } catch (error: any) {
-      const isDemoCredentials =
-        signInForm.email.trim().toLowerCase() === 'demo@taskflow.com' &&
-        signInForm.password === 'demo123';
-      const message = String(error?.message ?? '').toLowerCase();
-
-      if (isDemoCredentials && message.includes('invalid login credentials')) {
-        try {
-          toast.info('Setting up demo account...');
-          const { apiClient } = await import('../lib/api');
-          await apiClient.setupDemoAccount();
-          await signIn(signInForm.email, signInForm.password);
-          toast.success('Signed in with demo account');
-          navigate('/');
-          return;
-        } catch (demoError: any) {
-          toast.error(demoError.message || 'Failed to setup demo account');
-          console.error('Demo setup error:', demoError);
-          return;
-        }
-      }
-
       toast.error(error.message || 'Failed to sign in');
       console.error('Sign in error:', error);
     } finally {
@@ -79,8 +58,8 @@ export function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-3xl font-bold">TaskFlow</CardTitle>
-          <CardDescription>Project and task visibility dashboard</CardDescription>
+          <CardTitle className="text-3xl font-bold">AV CISC</CardTitle>
+          <CardDescription>Project and Schedule Management</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="signin" className="w-full">
@@ -117,11 +96,6 @@ export function AuthPage() {
                   {isLoading ? 'Signing in...' : 'Sign In'}
                 </Button>
               </form>
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
-                <p className="font-medium mb-1">Demo credentials</p>
-                <p>Email: demo@taskflow.com</p>
-                <p>Password: demo123</p>
-              </div>
             </TabsContent>
 
             <TabsContent value="signup">
