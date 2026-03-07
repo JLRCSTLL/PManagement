@@ -345,6 +345,30 @@ const normalizeTeamForStorage = (team: any, userId: string) => ({
   updatedAt: new Date().toISOString(),
 });
 
+function getProjectTeams(project: any): string[] {
+  return normalizeStringArray([
+    ...(Array.isArray(project?.visibleTeams) ? project.visibleTeams : []),
+    ...(Array.isArray(project?.visible_teams) ? project.visible_teams : []),
+    typeof project?.team === "string" ? project.team : "",
+  ]);
+}
+
+async function resolveTeamMemberIds(project: any): Promise<string[]> {
+  try {
+    const projectTeams = getProjectTeams(project);
+    if (projectTeams.length === 0) return [];
+
+    const users = await listAuthUsers(false);
+    const memberIds = users
+      .filter((authUser) => getUserTeams(authUser).some((team) => projectTeams.includes(team)))
+      .map((authUser) => authUser.id);
+    return normalizeStringArray(memberIds);
+  } catch (error) {
+    console.error("Resolve team member ids error:", error);
+    return [];
+  }
+}
+
 const canViewProject = (project: any, user: any, role: AppRole) => {
   if (role === "admin" || role === "team_lead") return true;
   const userId = typeof user?.id === "string" ? user.id : "";
@@ -369,23 +393,26 @@ const canCreateProject = (role: AppRole) =>
 const canEditProject = (project: any, user: any, role: AppRole) => {
   if (role === "admin") return true;
   if (!canViewProject(project, user, role)) return false;
-  if (role === "team_lead") return true;
-  const userId = typeof user?.id === "string" ? user.id : "";
-  const techAssignedIds: string[] = Array.isArray(project.techAssignedIds) ? project.techAssignedIds : [];
-  return project.createdBy === userId || techAssignedIds.includes(userId);
+  if (role === "team_lead" || role === "user") return true;
+  return false;
 };
 
-const canDeleteProject = (role: AppRole) => role === "admin";
+const canDeleteProject = (project: any, user: any, role: AppRole) =>
+  canEditProject(project, user, role);
 
 const canViewTask = (task: any, project: any, user: any, role: AppRole) => {
   if (!canViewProject(project, user, role)) return false;
   if (role === "admin" || role === "team_lead") return true;
   const userId = typeof user?.id === "string" ? user.id : "";
+  const userTeams = getUserTeams(user);
+  const projectTeams = getProjectTeams(project);
+  const sharesProjectTeam = projectTeams.some((team) => userTeams.includes(team));
 
   const taskVisibleUserIds: string[] = Array.isArray(task.visibleUserIds) ? task.visibleUserIds : [];
   if (taskVisibleUserIds.length === 0) return true;
 
   return (
+    sharesProjectTeam ||
     taskVisibleUserIds.includes(userId) ||
     task.assignedTo === userId ||
     task.requestedBy === userId ||
@@ -399,12 +426,12 @@ const canCreateTask = (role: AppRole) =>
 const canEditTask = (task: any, project: any, user: any, role: AppRole) => {
   if (role === "admin") return true;
   if (!canViewTask(task, project, user, role)) return false;
-  if (role === "team_lead") return true;
-  const userId = typeof user?.id === "string" ? user.id : "";
-  return task.createdBy === userId || task.assignedTo === userId;
+  if (role === "team_lead" || role === "user") return true;
+  return false;
 };
 
-const canDeleteTask = (role: AppRole) => role === "admin";
+const canDeleteTask = (task: any, project: any, user: any, role: AppRole) =>
+  canEditTask(task, project, user, role);
 
 const canViewAvSchedule = (user: any, role: AppRole) => {
   if (role === "admin" || role === "team_lead") return true;
@@ -1948,12 +1975,20 @@ app.delete("/server/projects/:id", async (c) => {
     const user = await getAuthUser(c);
     if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
     const role = getRoleFromUser(user);
-    if (!canDeleteProject(role)) return c.json({ error: "Forbidden" }, 403);
 
     const projectId = c.req.param("id");
     const projectKeys = await findProjectStorageKeys(projectId);
     if (projectKeys.length === 0) {
       return c.json({ error: "Project not found" }, 404);
+    }
+
+    const existingRaw = await kv.get(projectKeys[0]);
+    const existing = normalizeProjectRecord(unwrapStoredValue(existingRaw));
+    if (!existing) {
+      return c.json({ error: "Project not found" }, 404);
+    }
+    if (!canDeleteProject(existing, user, role)) {
+      return c.json({ error: "Forbidden" }, 403);
     }
 
     await kv.mdel(projectKeys);
@@ -2032,6 +2067,15 @@ app.post("/server/tasks", async (c) => {
 
     const taskId = crypto.randomUUID();
     const normalized = normalizeTaskForStorage(parsed.data);
+    if (role === "user" && normalized.visibleUserIds.length === 0) {
+      const sameTeamMemberIds = await resolveTeamMemberIds(project);
+      normalized.visibleUserIds = normalizeStringArray([
+        ...sameTeamMemberIds,
+        normalized.assignedTo,
+        normalized.requestedBy,
+        user.id,
+      ]);
+    }
     const taskData = {
       ...normalized,
       id: taskId,
@@ -2094,6 +2138,15 @@ app.put("/server/tasks/:id", async (c) => {
     }
 
     const normalized = normalizeTaskForStorage(parsed.data);
+    if (role === "user" && normalized.visibleUserIds.length === 0) {
+      const sameTeamMemberIds = await resolveTeamMemberIds(targetProject);
+      normalized.visibleUserIds = normalizeStringArray([
+        ...sameTeamMemberIds,
+        normalized.assignedTo,
+        normalized.requestedBy,
+        existing.createdBy || user.id,
+      ]);
+    }
     const updatedTask = {
       ...existing,
       ...normalized,
@@ -2128,12 +2181,26 @@ app.delete("/server/tasks/:id", async (c) => {
     const user = await getAuthUser(c);
     if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
     const role = getRoleFromUser(user);
-    if (!canDeleteTask(role)) return c.json({ error: "Forbidden" }, 403);
 
     const taskId = c.req.param("id");
     const keys = await findTaskStorageKeys(taskId);
     if (keys.length === 0) {
       return c.json({ error: "Task not found" }, 404);
+    }
+
+    const existingRaw = await kv.get(keys[0]);
+    const existing = normalizeTaskRecord(unwrapStoredValue(existingRaw));
+    if (!existing) {
+      return c.json({ error: "Task not found" }, 404);
+    }
+
+    const projects = await readProjects();
+    const project = projects.find((entry) => entry.id === existing.projectId);
+    if (!project) {
+      return c.json({ error: "Project not found" }, 404);
+    }
+    if (!canDeleteTask(existing, project, user, role)) {
+      return c.json({ error: "Forbidden" }, 403);
     }
 
     await kv.mdel(keys);

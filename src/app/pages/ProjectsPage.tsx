@@ -386,7 +386,8 @@ export function ProjectsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!canDeleteProject(role)) {
+    const targetProject = projects.find((project) => project.id === id);
+    if (!targetProject || !canDeleteProject(role, targetProject, user?.id)) {
       toast.error('You do not have permission to delete projects');
       return;
     }
@@ -592,7 +593,7 @@ export function ProjectsPage() {
           clientGroups={groupedProjects}
           canShowVisibility={canManageVisibility}
           canEditProject={(project) => canEditProject(role, project, user?.id)}
-          canDeleteProject={(_project) => canDeleteProject(role)}
+          canDeleteProject={(project) => canDeleteProject(role, project, user?.id)}
           onView={handleView}
           onEdit={handleEdit}
           onDelete={(id) => setDeleteConfirmId(id)}

@@ -265,7 +265,8 @@ export function TasksPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!canDeleteTask(role)) {
+    const targetTask = tasks.find((task) => task.id === id);
+    if (!targetTask || !canDeleteTask(role, targetTask, user?.id)) {
       toast.error('You do not have permission to delete tasks');
       return;
     }
@@ -405,7 +406,7 @@ export function TasksPage() {
           tasks={filteredTasks}
           projects={projects}
           canEditTask={(task) => canEditTask(role, task, user?.id)}
-          canDeleteTask={(_task) => canDeleteTask(role)}
+          canDeleteTask={(task) => canDeleteTask(role, task, user?.id)}
           onEdit={handleEdit}
           onDelete={(id) => setDeleteConfirmId(id)}
         />
