@@ -114,15 +114,17 @@ export function TaskForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="taskId">Task ID *</Label>
+          <Label htmlFor="taskIdDisplay">Task ID</Label>
+          <input type="hidden" {...register('taskId')} />
           <Input
-            id="taskId"
-            {...register('taskId', { required: 'Task ID is required' })}
-            placeholder="TASK-001"
+            id="taskIdDisplay"
+            value={initialData?.taskId || 'Auto-generated when task is created'}
+            readOnly
+            className="bg-gray-50"
           />
-          {errors.taskId && (
-            <p className="text-sm text-red-600">{errors.taskId.message}</p>
-          )}
+          <p className="text-xs text-gray-500">
+            {initialData ? 'Task ID is generated automatically and cannot be edited.' : 'Task ID will be created automatically on save.'}
+          </p>
         </div>
       </div>
 

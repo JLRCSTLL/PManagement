@@ -95,7 +95,7 @@ const ProjectNotePayloadSchema = z.object({
 const TaskPayloadSchema = z.object({
   projectId: z.string().min(1, "Project is required"),
   title: z.string().min(1, "Task title is required"),
-  taskId: z.string().min(1, "Task ID is required"),
+  taskId: z.string().optional().default(""),
   description: z.string().optional().default(""),
   assignedTo: z.string().optional().default(""),
   requestedBy: z.string().optional().default(""),
@@ -364,7 +364,7 @@ const normalizeProjectForStorage = (project: any, userId: string) => {
 const normalizeTaskForStorage = (task: any) => ({
   projectId: task.projectId.trim(),
   title: task.title.trim(),
-  taskId: task.taskId.trim(),
+  taskId: typeof task.taskId === "string" ? task.taskId.trim() : "",
   description: task.description?.trim() || "",
   assignedTo: task.assignedTo?.trim() || "",
   requestedBy: task.requestedBy?.trim() || "",
@@ -378,6 +378,35 @@ const normalizeTaskForStorage = (task: any) => ({
   referenceLink: sanitizeHttpUrl(task.referenceLink),
   visibleUserIds: normalizeStringArray(Array.isArray(task.visibleUserIds) ? task.visibleUserIds : []),
 });
+
+function generateTaskIdentifier(tasks: any[], projectId: string): string {
+  const targetProjectId = typeof projectId === "string" ? projectId.trim() : "";
+  const existingIds = new Set(
+    tasks
+      .filter((task) => task?.projectId === targetProjectId)
+      .map((task) => (typeof task?.taskId === "string" ? task.taskId.trim().toUpperCase() : ""))
+      .filter(Boolean),
+  );
+
+  let maxSuffix = 0;
+  for (const taskId of existingIds) {
+    const match = taskId.match(/(\d+)$/);
+    if (!match) continue;
+    const numeric = Number(match[1]);
+    if (Number.isFinite(numeric)) {
+      maxSuffix = Math.max(maxSuffix, numeric);
+    }
+  }
+
+  let next = maxSuffix + 1;
+  while (true) {
+    const candidate = `TASK-${String(next).padStart(3, "0")}`;
+    if (!existingIds.has(candidate.toUpperCase())) {
+      return candidate;
+    }
+    next += 1;
+  }
+}
 
 const normalizeTeamForStorage = (team: any, userId: string) => ({
   name: normalizeTeamName(team.name),
@@ -2217,7 +2246,9 @@ app.post("/server/tasks", async (c) => {
     }
 
     const taskId = crypto.randomUUID();
+    const existingTasks = await readTasks();
     const normalized = normalizeTaskForStorage(parsed.data);
+    normalized.taskId = normalized.taskId || generateTaskIdentifier(existingTasks, normalized.projectId);
     if (role === "user" && normalized.visibleUserIds.length === 0) {
       const sameTeamMemberIds = await resolveTeamMemberIds(project);
       normalized.visibleUserIds = normalizeStringArray([
@@ -2289,6 +2320,7 @@ app.put("/server/tasks/:id", async (c) => {
     }
 
     const normalized = normalizeTaskForStorage(parsed.data);
+    normalized.taskId = normalized.taskId || existing.taskId || generateTaskIdentifier(await readTasks(), normalized.projectId);
     if (role === "user" && normalized.visibleUserIds.length === 0) {
       const sameTeamMemberIds = await resolveTeamMemberIds(targetProject);
       normalized.visibleUserIds = normalizeStringArray([
