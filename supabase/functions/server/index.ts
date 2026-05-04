@@ -2625,6 +2625,10 @@ app.get("/server/quota", async (c) => {
 
     const proposals = records.filter((project) => project.projectType === "proposal");
     const projects = records.filter((project) => project.projectType === "project");
+
+    const proposalAmount = proposals.reduce((sum, project) => sum + getProjectAmount(project), 0);
+    const projectAmount = projects.reduce((sum, project) => sum + getProjectAmount(project), 0);
+    const grandTotal = proposalAmount + projectAmount;
     const userQuotaTargetRecord = await readUserQuotaTargetRecord(user.id);
     const userQuotaTarget = userQuotaTargetRecord.amount;
     const userQuotaProgressPercent = userQuotaTarget > 0
@@ -2635,10 +2639,6 @@ app.get("/server/quota", async (c) => {
       : 0;
     const userQuotaRemainingAmount = userQuotaTarget > 0 ? Math.max(0, userQuotaTarget - grandTotal) : 0;
     const userQuotaExceededAmount = userQuotaTarget > 0 ? Math.max(0, grandTotal - userQuotaTarget) : 0;
-
-    const proposalAmount = proposals.reduce((sum, project) => sum + getProjectAmount(project), 0);
-    const projectAmount = projects.reduce((sum, project) => sum + getProjectAmount(project), 0);
-    const grandTotal = proposalAmount + projectAmount;
 
     const totalProposals = proposals.length;
     const totalProjects = projects.length;
