@@ -69,7 +69,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { apiClient } = await import('../lib/api');
       const { user } = await apiClient.getMe();
-      const apiTeamInfo = resolveTeamInfo(user);
+      let apiTeamInfo = resolveTeamInfo(user);
+
+      // Some backend versions of /me do not include team fields.
+      // Fallback to /users and read the current user's teams there.
+      if (!apiTeamInfo.team && apiTeamInfo.teams.length === 0) {
+        try {
+          const { users } = await apiClient.getUsers();
+          const currentId = user.id || fallback.id;
+          const currentEmail = user.email || fallback.email;
+          const currentUser = Array.isArray(users)
+            ? users.find((entry: any) => entry?.id === currentId || entry?.email === currentEmail)
+            : null;
+          if (currentUser) {
+            apiTeamInfo = resolveTeamInfo(currentUser);
+          }
+        } catch {
+          // Keep existing fallback values when users endpoint is unavailable.
+        }
+      }
+
       return {
         id: user.id || fallback.id,
         email: user.email || fallback.email,

@@ -1360,6 +1360,7 @@ app.get("/server/me", async (c) => {
   try {
     const user = await getAuthUser(c);
     if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const teams = getUserTeams(user);
 
     return c.json({
       user: {
@@ -1368,6 +1369,8 @@ app.get("/server/me", async (c) => {
         name: user.user_metadata?.name || "User",
         role: getRoleFromUser(user),
         isActive: isUserActive(user),
+        team: teams[0] || "",
+        teams,
       },
     });
   } catch (error) {
