@@ -98,7 +98,9 @@ export function ProjectsTable({
       >
         <TableCell>
           <div className={nested ? 'pl-6' : ''}>
-            <div className="font-medium text-gray-900">{project.projectName}</div>
+            <div className="font-medium text-gray-900 max-w-[300px]">
+              <span className="block truncate" title={project.projectName}>{project.projectName}</span>
+            </div>
             {!nested && (
               <div className="text-xs text-gray-500 mt-1">{project.client || 'Unassigned Client'}</div>
             )}

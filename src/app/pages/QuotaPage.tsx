@@ -191,6 +191,7 @@ function normalizeQuotaResponse(payload: any): QuotaResponse {
       averageProjectValue: toNumber(payload?.quotaMetrics?.averageProjectValue),
     },
     userQuotaTarget: toNumber(payload?.userQuotaTarget),
+    userQuotaCountableAmount: toNumber(payload?.userQuotaCountableAmount),
     userQuotaProgressPercent: toNumber(payload?.userQuotaProgressPercent),
     userQuotaProgressPercentRaw: toNumber(payload?.userQuotaProgressPercentRaw),
     userQuotaRemainingAmount: toNumber(payload?.userQuotaRemainingAmount),
@@ -451,13 +452,20 @@ export function QuotaPage() {
       setData((prev) => {
         if (!prev) return prev;
         const quotaTarget = Number.isFinite(amount) ? Math.max(0, amount) : normalizedAmount;
+        const countableAmount = toNumber(prev.userQuotaCountableAmount);
         const progressPercent = quotaTarget > 0
-          ? Number(Math.min(100, (prev.summary.grandTotal / quotaTarget) * 100).toFixed(2))
+          ? Number(Math.min(100, (countableAmount / quotaTarget) * 100).toFixed(2))
+          : 0;
+        const progressPercentRaw = quotaTarget > 0
+          ? Number(((countableAmount / quotaTarget) * 100).toFixed(2))
           : 0;
         return {
           ...prev,
           userQuotaTarget: quotaTarget,
           userQuotaProgressPercent: progressPercent,
+          userQuotaProgressPercentRaw: progressPercentRaw,
+          userQuotaRemainingAmount: quotaTarget > 0 ? Math.max(0, quotaTarget - countableAmount) : 0,
+          userQuotaExceededAmount: quotaTarget > 0 ? Math.max(0, countableAmount - quotaTarget) : 0,
         };
       });
       setQuotaTargetInput((Number.isFinite(amount) ? amount : normalizedAmount).toFixed(2));
@@ -1113,7 +1121,9 @@ export function QuotaPage() {
               <TableBody>
                 {filteredRecords.map((project) => (
                   <TableRow key={project.id}>
-                    <TableCell className="font-medium max-w-[240px] truncate">{project.projectName}</TableCell>
+                    <TableCell className="font-medium max-w-[240px]">
+                      <span className="block truncate" title={project.projectName}>{project.projectName}</span>
+                    </TableCell>
                     <TableCell>
                       <Badge className={typeColors[project.projectType]} variant="secondary">
                         {project.projectType === 'proposal' ? 'Proposal' : 'Project'}

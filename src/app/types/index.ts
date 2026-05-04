@@ -187,6 +187,7 @@ export interface QuotaResponse {
   summary: QuotaSummary;
   quotaMetrics: QuotaMetrics;
   userQuotaTarget: number;
+  userQuotaCountableAmount?: number;
   userQuotaProgressPercent: number;
   userQuotaProgressPercentRaw?: number;
   userQuotaRemainingAmount?: number;

@@ -2635,7 +2635,10 @@ app.get("/server/quota", async (c) => {
       const techAssignedIds = Array.isArray(project.techAssignedIds) ? project.techAssignedIds : [];
       return project.createdBy === user.id || project.userId === user.id || techAssignedIds.includes(user.id);
     });
-    const userAttributedGrandTotal = userAttributedRecords.reduce((sum, project) => sum + getProjectAmount(project), 0);
+    const userAttributedQuotaRecords = userAttributedRecords.filter(
+      (project) => project.projectType === "project" && project.status !== "Cancelled",
+    );
+    const userAttributedGrandTotal = userAttributedQuotaRecords.reduce((sum, project) => sum + getProjectAmount(project), 0);
 
     const userQuotaTargetRecord = await readUserQuotaTargetRecord(user.id);
     const userQuotaTarget = userQuotaTargetRecord.amount;
@@ -2722,6 +2725,7 @@ app.get("/server/quota", async (c) => {
       },
       monthlyTrend,
       userQuotaTarget,
+      userQuotaCountableAmount: userAttributedGrandTotal,
       userQuotaProgressPercent,
       userQuotaProgressPercentRaw,
       userQuotaRemainingAmount,
