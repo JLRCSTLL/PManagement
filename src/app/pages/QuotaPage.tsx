@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ExternalLink, Search } from 'lucide-react';
@@ -235,6 +235,134 @@ function dateValue(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+type ConfettiParticle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  rotation: number;
+  rotationSpeed: number;
+  life: number;
+  color: string;
+};
+
+function launchQuotaConfetti(): () => void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return () => {};
+  }
+
+  const existingCanvas = document.getElementById('quota-confetti-overlay');
+  if (existingCanvas) {
+    existingCanvas.remove();
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.id = 'quota-confetti-overlay';
+  canvas.style.position = 'fixed';
+  canvas.style.inset = '0';
+  canvas.style.width = '100vw';
+  canvas.style.height = '100vh';
+  canvas.style.pointerEvents = 'none';
+  canvas.style.zIndex = '9999';
+  document.body.appendChild(canvas);
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    canvas.remove();
+    return () => {};
+  }
+
+  const colors = ['#ef4444', '#f59e0b', '#22c55e', '#06b6d4', '#3b82f6', '#a855f7', '#ec4899'];
+  const particles: ConfettiParticle[] = [];
+  const start = performance.now();
+  let frameHandle = 0;
+
+  const getWidth = () => window.innerWidth;
+  const getHeight = () => window.innerHeight;
+
+  const resize = () => {
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.floor(getWidth() * dpr);
+    canvas.height = Math.floor(getHeight() * dpr);
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+
+  const createBurst = (originX: number, originY: number, count: number) => {
+    for (let index = 0; index < count; index += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 3 + Math.random() * 7;
+      particles.push({
+        x: originX,
+        y: originY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 2.5,
+        size: 4 + Math.random() * 7,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.3,
+        life: 80 + Math.random() * 60,
+        color: colors[Math.floor(Math.random() * colors.length)],
+      });
+    }
+  };
+
+  const animate = () => {
+    const width = getWidth();
+    const height = getHeight();
+    context.clearRect(0, 0, width, height);
+
+    for (let index = particles.length - 1; index >= 0; index -= 1) {
+      const particle = particles[index];
+      particle.vy += 0.12;
+      particle.vx *= 0.992;
+      particle.vy *= 0.996;
+      particle.x += particle.vx;
+      particle.y += particle.vy;
+      particle.rotation += particle.rotationSpeed;
+      particle.life -= 1;
+
+      if (particle.life <= 0 || particle.y > height + 30) {
+        particles.splice(index, 1);
+        continue;
+      }
+
+      const alpha = Math.max(0, Math.min(1, particle.life / 100));
+      context.save();
+      context.translate(particle.x, particle.y);
+      context.rotate(particle.rotation);
+      context.globalAlpha = alpha;
+      context.fillStyle = particle.color;
+      context.fillRect(-particle.size / 2, -particle.size / 2, particle.size, particle.size * 0.6);
+      context.restore();
+    }
+
+    const elapsed = performance.now() - start;
+    const shouldContinue = elapsed < 2600 || particles.length > 0;
+    if (shouldContinue) {
+      frameHandle = window.requestAnimationFrame(animate);
+    } else {
+      cleanup();
+    }
+  };
+
+  const cleanup = () => {
+    window.cancelAnimationFrame(frameHandle);
+    window.removeEventListener('resize', resize);
+    if (canvas.parentNode) {
+      canvas.parentNode.removeChild(canvas);
+    }
+  };
+
+  resize();
+  window.addEventListener('resize', resize);
+  createBurst(getWidth() * 0.5, getHeight() * 0.5, 220);
+  createBurst(getWidth() * 0.25, getHeight() * 0.45, 110);
+  createBurst(getWidth() * 0.75, getHeight() * 0.45, 110);
+  animate();
+
+  return cleanup;
+}
+
 function matchesDateRange(project: Project, fromDate: string, toDate: string): boolean {
   if (!fromDate && !toDate) return true;
   const startCandidate = project.startDate || project.createdAt || '';
@@ -267,6 +395,7 @@ export function QuotaPage() {
   const [dateTo, setDateTo] = useState('');
   const [sortField, setSortField] = useState<SortField>('targetEndDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const hasTriggeredConfetti = useRef(false);
 
   useEffect(() => {
     loadQuotaData();
@@ -276,6 +405,23 @@ export function QuotaPage() {
     if (!data) return;
     setQuotaTargetInput(data.userQuotaTarget > 0 ? data.userQuotaTarget.toFixed(2) : '');
   }, [data?.userQuotaTarget]);
+
+  const hasReachedQuota = useMemo(() => {
+    if (!data || data.userQuotaTarget <= 0) return false;
+    const rawProgress = Number.isFinite(data.userQuotaProgressPercentRaw)
+      ? data.userQuotaProgressPercentRaw
+      : data.userQuotaProgressPercent;
+    return rawProgress >= 100 || data.summary.grandTotal >= data.userQuotaTarget;
+  }, [data]);
+
+  useEffect(() => {
+    if (!hasReachedQuota || hasTriggeredConfetti.current) return;
+    hasTriggeredConfetti.current = true;
+    const stopConfetti = launchQuotaConfetti();
+    return () => {
+      stopConfetti();
+    };
+  }, [hasReachedQuota]);
 
   async function loadQuotaData() {
     setIsLoading(true);
