@@ -192,6 +192,10 @@ function normalizeQuotaResponse(payload: any): QuotaResponse {
     },
     userQuotaTarget: toNumber(payload?.userQuotaTarget),
     userQuotaProgressPercent: toNumber(payload?.userQuotaProgressPercent),
+    userQuotaProgressPercentRaw: toNumber(payload?.userQuotaProgressPercentRaw),
+    userQuotaRemainingAmount: toNumber(payload?.userQuotaRemainingAmount),
+    userQuotaExceededAmount: toNumber(payload?.userQuotaExceededAmount),
+    userQuotaTargetUpdatedAt: typeof payload?.userQuotaTargetUpdatedAt === 'string' ? payload.userQuotaTargetUpdatedAt : '',
     statusBreakdown: {
       all: payload?.statusBreakdown?.all || {},
       proposals: payload?.statusBreakdown?.proposals || {},

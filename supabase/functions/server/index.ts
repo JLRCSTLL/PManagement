@@ -961,10 +961,27 @@ async function readAppSettings() {
 }
 
 async function readUserQuotaTarget(userId: string): Promise<number> {
+  const target = await readUserQuotaTargetRecord(userId);
+  return target.amount;
+}
+
+async function readUserQuotaTargetRecord(userId: string): Promise<{ amount: number; updatedAt: string }> {
   const key = `quota-target:${userId}`;
   const stored = await kv.get(key);
   const normalized = normalizeQuotaTargetRecord(stored);
-  return normalized?.amount || 0;
+  return {
+    amount: normalized?.amount || 0,
+    updatedAt: normalized?.updatedAt || "",
+  };
+}
+
+async function listQuotaTargets() {
+  const rows = await kv.getByPrefix("quota-target:");
+  const targets = rows
+    .map((row) => normalizeQuotaTargetRecord(unwrapStoredValue(row)))
+    .filter((entry): entry is { userId: string; amount: number; updatedAt: string } => Boolean(entry))
+    .sort((a, b) => b.amount - a.amount);
+  return targets;
 }
 
 async function findProjectStorageKeys(projectId: string): Promise<string[]> {
@@ -2500,6 +2517,64 @@ app.delete("/server/av-schedule/:id", async (c) => {
 
 // ==================== QUOTA ROUTES ====================
 
+app.get("/server/quota-target", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+
+    const target = await readUserQuotaTargetRecord(user.id);
+    return c.json(target);
+  } catch (err) {
+    console.error("Get quota target error:", err);
+    return c.json({ error: "Failed to fetch quota target" }, 500);
+  }
+});
+
+app.get("/server/quota-targets", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    if (!canManageUsers(role)) return c.json({ error: "Forbidden" }, 403);
+
+    const usersResult = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (usersResult.error) {
+      return c.json({ error: usersResult.error.message }, 500);
+    }
+
+    const activeUsers = (usersResult.data.users || []).filter((entry) => isUserActive(entry));
+    const userMap = new Map(
+      activeUsers.map((entry) => [
+        entry.id,
+        {
+          userId: entry.id,
+          email: entry.email || "",
+          name: entry.user_metadata?.name || entry.email || "User",
+          role: serializeRole(entry.user_metadata?.role),
+          teams: getUserTeams(entry),
+        },
+      ]),
+    );
+
+    const targets = await listQuotaTargets();
+    const targetByUser = new Map(targets.map((target) => [target.userId, target]));
+    const merged = activeUsers.map((entry) => {
+      const record = targetByUser.get(entry.id);
+      const base = userMap.get(entry.id)!;
+      return {
+        ...base,
+        amount: record?.amount || 0,
+        updatedAt: record?.updatedAt || "",
+      };
+    });
+
+    return c.json({ targets: merged });
+  } catch (err) {
+    console.error("Get quota targets error:", err);
+    return c.json({ error: "Failed to fetch quota targets" }, 500);
+  }
+});
+
 app.get("/server/quota", async (c) => {
   try {
     const user = await getAuthUser(c);
@@ -2518,7 +2593,16 @@ app.get("/server/quota", async (c) => {
 
     const proposals = records.filter((project) => project.projectType === "proposal");
     const projects = records.filter((project) => project.projectType === "project");
-    const userQuotaTarget = await readUserQuotaTarget(user.id);
+    const userQuotaTargetRecord = await readUserQuotaTargetRecord(user.id);
+    const userQuotaTarget = userQuotaTargetRecord.amount;
+    const userQuotaProgressPercent = userQuotaTarget > 0
+      ? Number(Math.min(100, (grandTotal / userQuotaTarget) * 100).toFixed(2))
+      : 0;
+    const userQuotaProgressPercentRaw = userQuotaTarget > 0
+      ? Number(((grandTotal / userQuotaTarget) * 100).toFixed(2))
+      : 0;
+    const userQuotaRemainingAmount = userQuotaTarget > 0 ? Math.max(0, userQuotaTarget - grandTotal) : 0;
+    const userQuotaExceededAmount = userQuotaTarget > 0 ? Math.max(0, grandTotal - userQuotaTarget) : 0;
 
     const proposalAmount = proposals.reduce((sum, project) => sum + getProjectAmount(project), 0);
     const projectAmount = projects.reduce((sum, project) => sum + getProjectAmount(project), 0);
@@ -2598,9 +2682,11 @@ app.get("/server/quota", async (c) => {
       },
       monthlyTrend,
       userQuotaTarget,
-      userQuotaProgressPercent: userQuotaTarget > 0
-        ? Number(Math.min(100, (grandTotal / userQuotaTarget) * 100).toFixed(2))
-        : 0,
+      userQuotaProgressPercent,
+      userQuotaProgressPercentRaw,
+      userQuotaRemainingAmount,
+      userQuotaExceededAmount,
+      userQuotaTargetUpdatedAt: userQuotaTargetRecord.updatedAt,
       proposals,
       projects,
       records,
@@ -2622,13 +2708,14 @@ app.put("/server/quota-target", async (c) => {
     }
 
     const amount = Number.isFinite(parsed.data.amount) ? Math.max(0, parsed.data.amount) : 0;
+    const updatedAt = new Date().toISOString();
     await kv.set(`quota-target:${user.id}`, {
       userId: user.id,
       amount,
-      updatedAt: new Date().toISOString(),
+      updatedAt,
     });
 
-    return c.json({ amount });
+    return c.json({ userId: user.id, amount, updatedAt });
   } catch (err) {
     console.error("Update quota target error:", err);
     return c.json({ error: "Failed to update quota target" }, 500);

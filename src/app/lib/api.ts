@@ -213,9 +213,31 @@ export class ApiClient {
   }
 
   async updateQuotaTarget(amount: number) {
-    return this.request<{ amount: number }>('/quota-target', {
+    return this.request<{ userId: string; amount: number; updatedAt: string }>('/quota-target', {
       method: 'PUT',
       body: JSON.stringify({ amount }),
+    });
+  }
+
+  async getQuotaTarget() {
+    return this.request<{ amount: number; updatedAt: string }>('/quota-target', {
+      method: 'GET',
+    });
+  }
+
+  async getQuotaTargets() {
+    return this.request<{
+      targets: Array<{
+        userId: string;
+        email: string;
+        name: string;
+        role: 'admin' | 'team_lead' | 'user';
+        teams: string[];
+        amount: number;
+        updatedAt: string;
+      }>;
+    }>('/quota-targets', {
+      method: 'GET',
     });
   }
 

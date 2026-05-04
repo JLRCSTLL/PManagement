@@ -188,6 +188,10 @@ export interface QuotaResponse {
   quotaMetrics: QuotaMetrics;
   userQuotaTarget: number;
   userQuotaProgressPercent: number;
+  userQuotaProgressPercentRaw?: number;
+  userQuotaRemainingAmount?: number;
+  userQuotaExceededAmount?: number;
+  userQuotaTargetUpdatedAt?: string;
   statusBreakdown: {
     all: Record<string, number>;
     proposals: Record<string, number>;
