@@ -411,7 +411,7 @@ export function QuotaPage() {
     const rawProgress = Number.isFinite(data.userQuotaProgressPercentRaw)
       ? data.userQuotaProgressPercentRaw
       : data.userQuotaProgressPercent;
-    return rawProgress >= 100 || data.summary.grandTotal >= data.userQuotaTarget;
+    return rawProgress >= 100;
   }, [data]);
 
   useEffect(() => {

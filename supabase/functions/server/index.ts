@@ -1086,6 +1086,7 @@ function serializeProject(project: any, directory: Record<string, string>) {
 
   return {
     id: project.id,
+    userId: typeof project.userId === "string" ? project.userId : "",
     projectName: project.projectName || "",
     client: project.client || "",
     projectType: normalizeProjectType(project.projectType || project.project_type),
@@ -2629,16 +2630,23 @@ app.get("/server/quota", async (c) => {
     const proposalAmount = proposals.reduce((sum, project) => sum + getProjectAmount(project), 0);
     const projectAmount = projects.reduce((sum, project) => sum + getProjectAmount(project), 0);
     const grandTotal = proposalAmount + projectAmount;
+
+    const userAttributedRecords = records.filter((project) => {
+      const techAssignedIds = Array.isArray(project.techAssignedIds) ? project.techAssignedIds : [];
+      return project.createdBy === user.id || project.userId === user.id || techAssignedIds.includes(user.id);
+    });
+    const userAttributedGrandTotal = userAttributedRecords.reduce((sum, project) => sum + getProjectAmount(project), 0);
+
     const userQuotaTargetRecord = await readUserQuotaTargetRecord(user.id);
     const userQuotaTarget = userQuotaTargetRecord.amount;
     const userQuotaProgressPercent = userQuotaTarget > 0
-      ? Number(Math.min(100, (grandTotal / userQuotaTarget) * 100).toFixed(2))
+      ? Number(Math.min(100, (userAttributedGrandTotal / userQuotaTarget) * 100).toFixed(2))
       : 0;
     const userQuotaProgressPercentRaw = userQuotaTarget > 0
-      ? Number(((grandTotal / userQuotaTarget) * 100).toFixed(2))
+      ? Number(((userAttributedGrandTotal / userQuotaTarget) * 100).toFixed(2))
       : 0;
-    const userQuotaRemainingAmount = userQuotaTarget > 0 ? Math.max(0, userQuotaTarget - grandTotal) : 0;
-    const userQuotaExceededAmount = userQuotaTarget > 0 ? Math.max(0, grandTotal - userQuotaTarget) : 0;
+    const userQuotaRemainingAmount = userQuotaTarget > 0 ? Math.max(0, userQuotaTarget - userAttributedGrandTotal) : 0;
+    const userQuotaExceededAmount = userQuotaTarget > 0 ? Math.max(0, userAttributedGrandTotal - userQuotaTarget) : 0;
 
     const totalProposals = proposals.length;
     const totalProjects = projects.length;
