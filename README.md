@@ -1,6 +1,6 @@
-# AV CISC RBAC Dashboard
+# Project Management RBAC Dashboard
 
-AV CISC is a React + Supabase project/task dashboard with role-based visibility, admin user controls, and project/task assignment workflows.
+Project Management is a React + Supabase project/task dashboard with role-based visibility, admin user controls, and project/task assignment workflows.
 
 ## Stack
 
