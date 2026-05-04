@@ -179,3 +179,53 @@
     line-height: 1.5;
   }
 }
+
+@layer utilities {
+  .dark {
+    color-scheme: dark;
+  }
+
+  .dark .bg-white {
+    background-color: color-mix(in oklab, var(--color-card) 92%, black 8%);
+  }
+
+  .dark .bg-gray-50 {
+    background-color: color-mix(in oklab, var(--color-background) 88%, black 12%);
+  }
+
+  .dark .bg-gray-100 {
+    background-color: color-mix(in oklab, var(--color-card) 82%, black 18%);
+  }
+
+  .dark .border-gray-100,
+  .dark .border-gray-200,
+  .dark .border-gray-300 {
+    border-color: var(--color-border);
+  }
+
+  .dark .text-gray-900 {
+    color: var(--color-foreground);
+  }
+
+  .dark .text-gray-700,
+  .dark .text-gray-600 {
+    color: color-mix(in oklab, var(--color-foreground) 82%, transparent);
+  }
+
+  .dark .text-gray-500,
+  .dark .text-gray-400 {
+    color: var(--color-muted-foreground);
+  }
+
+  .dark .hover\:bg-gray-100:hover {
+    background-color: color-mix(in oklab, var(--color-card) 76%, black 24%);
+  }
+
+  .dark .bg-blue-50 {
+    background-color: color-mix(in oklab, #2563eb 20%, transparent);
+  }
+
+  .dark .text-blue-700 {
+    color: color-mix(in oklab, #93c5fd 86%, white 14%);
+  }
+}

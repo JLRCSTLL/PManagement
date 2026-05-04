@@ -18,6 +18,7 @@ type AppRole = "admin" | "team_lead" | "user";
 const URL_PROTOCOLS = new Set(["http:", "https:"]);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RANGE_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)\s*-\s*([01]\d|2[0-3]):([0-5]\d)$/;
+const TIME_OF_DAY_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 const HttpUrlSchema = z
   .string()
@@ -142,6 +143,47 @@ const AvSchedulePayloadSchema = z.object({
     .refine((value) => value === "" || TIME_RANGE_PATTERN.test(value), "Schedule time must use HH:mm-HH:mm"),
   workMode: z.enum(["In Office", "WFH"]),
   note: z.string().optional().default(""),
+});
+
+const QuotaTargetPayloadSchema = z.object({
+  amount: z.number().min(0).max(1_000_000_000_000),
+});
+
+const DEFAULT_APP_SETTINGS = {
+  organizationName: "Project Management",
+  dashboardSubtitle: "Project and Schedule Management",
+  timezone: "Asia/Manila",
+  defaultCurrency: "PHP" as "PHP" | "USD" | "EUR",
+  dateFormat: "YYYY-MM-DD" as "YYYY-MM-DD" | "MMM dd, yyyy" | "dd/MM/yyyy",
+  weekStartsOn: "monday" as "monday" | "sunday",
+  defaultProjectVisibility: "team_only" as "team_only" | "all_teams",
+  enableTaskDueReminders: true,
+  reminderLeadDays: 3,
+  enableDailySummary: false,
+  dailySummaryTime: "09:00",
+};
+
+const AppSettingsPayloadSchema = z.object({
+  organizationName: z.string().trim().min(1).max(120).default(DEFAULT_APP_SETTINGS.organizationName),
+  dashboardSubtitle: z.string().trim().min(1).max(160).default(DEFAULT_APP_SETTINGS.dashboardSubtitle),
+  timezone: z.string().trim().min(1).max(80).default(DEFAULT_APP_SETTINGS.timezone),
+  defaultCurrency: z.enum(["PHP", "USD", "EUR"]).default(DEFAULT_APP_SETTINGS.defaultCurrency),
+  dateFormat: z.enum(["YYYY-MM-DD", "MMM dd, yyyy", "dd/MM/yyyy"]).default(DEFAULT_APP_SETTINGS.dateFormat),
+  weekStartsOn: z.enum(["monday", "sunday"]).default(DEFAULT_APP_SETTINGS.weekStartsOn),
+  defaultProjectVisibility: z.enum(["team_only", "all_teams"]).default(DEFAULT_APP_SETTINGS.defaultProjectVisibility),
+  enableTaskDueReminders: z.boolean().default(DEFAULT_APP_SETTINGS.enableTaskDueReminders),
+  reminderLeadDays: z.number().int().min(1).max(30).default(DEFAULT_APP_SETTINGS.reminderLeadDays),
+  enableDailySummary: z.boolean().default(DEFAULT_APP_SETTINGS.enableDailySummary),
+  dailySummaryTime: z
+    .string()
+    .trim()
+    .refine((value) => TIME_OF_DAY_PATTERN.test(value), "Daily summary time must use HH:mm format")
+    .default(DEFAULT_APP_SETTINGS.dailySummaryTime),
+});
+
+const AppSettingsStorageSchema = AppSettingsPayloadSchema.extend({
+  updatedAt: z.string().optional().default(() => new Date().toISOString()),
+  updatedBy: z.string().optional().default(""),
 });
 
 function normalizeDate(value: unknown): string {
@@ -447,6 +489,7 @@ const canManageAvScheduleEntry = (entry: any, user: any, role: AppRole) => {
 
 const canManageUsers = (role: AppRole) => role === "admin";
 const canManageTeams = (role: AppRole) => role === "admin" || role === "team_lead";
+const canManageSystemSettings = (role: AppRole) => role === "admin";
 
 const PROJECT_PRIORITY_ORDER: Record<string, number> = {
   Low: 1,
@@ -826,6 +869,37 @@ function normalizeTeamRecord(team: any) {
   };
 }
 
+function normalizeQuotaTargetRecord(raw: any) {
+  const source = unwrapStoredValue(raw) ?? raw;
+  if (!source || typeof source !== "object") return null;
+
+  const userId = typeof source.userId === "string" ? source.userId : "";
+  const amountRaw = typeof source.amount === "number" ? source.amount : Number(source.amount);
+  const amount = Number.isFinite(amountRaw) ? Math.max(0, amountRaw) : 0;
+  const updatedAt = typeof source.updatedAt === "string" ? source.updatedAt : new Date().toISOString();
+
+  if (!userId) return null;
+  return {
+    userId,
+    amount,
+    updatedAt,
+  };
+}
+
+function normalizeAppSettingsRecord(settings: any) {
+  const source = unwrapStoredValue(settings) ?? settings;
+  const parsed = AppSettingsStorageSchema.safeParse(source);
+  if (!parsed.success) {
+    return {
+      ...DEFAULT_APP_SETTINGS,
+      updatedAt: new Date().toISOString(),
+      updatedBy: "",
+    };
+  }
+
+  return parsed.data;
+}
+
 function dedupeById<T extends { id: string; createdAt?: string; updatedAt?: string }>(records: T[]): T[] {
   const map = new Map<string, T>();
   for (const record of records) {
@@ -879,6 +953,18 @@ async function readTeams() {
     .filter((team): team is any => team !== null);
 
   return dedupeById(teams);
+}
+
+async function readAppSettings() {
+  const stored = await kv.get("settings:global");
+  return normalizeAppSettingsRecord(stored);
+}
+
+async function readUserQuotaTarget(userId: string): Promise<number> {
+  const key = `quota-target:${userId}`;
+  const stored = await kv.get(key);
+  const normalized = normalizeQuotaTargetRecord(stored);
+  return normalized?.amount || 0;
 }
 
 async function findProjectStorageKeys(projectId: string): Promise<string[]> {
@@ -1583,6 +1669,51 @@ app.delete("/server/admin/users/:id", async (c) => {
   } catch (error) {
     console.error("Admin delete user error:", error);
     return c.json({ error: "Failed to delete user" }, 500);
+  }
+});
+
+// ==================== SETTINGS ROUTES ====================
+
+app.get("/server/settings", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    if (!canManageSystemSettings(role)) return c.json({ error: "Forbidden" }, 403);
+
+    const settings = await readAppSettings();
+    return c.json({ settings });
+  } catch (error) {
+    console.error("Get settings error:", error);
+    return c.json({ error: "Failed to fetch settings" }, 500);
+  }
+});
+
+app.put("/server/settings", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    if (!canManageSystemSettings(role)) return c.json({ error: "Forbidden" }, 403);
+
+    const parsed = AppSettingsPayloadSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+
+    const existing = await readAppSettings();
+    const nextSettings = normalizeAppSettingsRecord({
+      ...existing,
+      ...parsed.data,
+      updatedAt: new Date().toISOString(),
+      updatedBy: user.id,
+    });
+
+    await kv.set("settings:global", nextSettings);
+    return c.json({ settings: nextSettings });
+  } catch (error) {
+    console.error("Update settings error:", error);
+    return c.json({ error: "Failed to update settings" }, 500);
   }
 });
 
@@ -2387,6 +2518,7 @@ app.get("/server/quota", async (c) => {
 
     const proposals = records.filter((project) => project.projectType === "proposal");
     const projects = records.filter((project) => project.projectType === "project");
+    const userQuotaTarget = await readUserQuotaTarget(user.id);
 
     const proposalAmount = proposals.reduce((sum, project) => sum + getProjectAmount(project), 0);
     const projectAmount = projects.reduce((sum, project) => sum + getProjectAmount(project), 0);
@@ -2465,6 +2597,10 @@ app.get("/server/quota", async (c) => {
         byTeam: buildGroupedTotals(records, (project) => project.team || "Unassigned"),
       },
       monthlyTrend,
+      userQuotaTarget,
+      userQuotaProgressPercent: userQuotaTarget > 0
+        ? Number(Math.min(100, (grandTotal / userQuotaTarget) * 100).toFixed(2))
+        : 0,
       proposals,
       projects,
       records,
@@ -2472,6 +2608,30 @@ app.get("/server/quota", async (c) => {
   } catch (err) {
     console.error("Get quota data error:", err);
     return c.json({ error: "Failed to fetch quota data" }, 500);
+  }
+});
+
+app.put("/server/quota-target", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+
+    const parsed = QuotaTargetPayloadSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+
+    const amount = Number.isFinite(parsed.data.amount) ? Math.max(0, parsed.data.amount) : 0;
+    await kv.set(`quota-target:${user.id}`, {
+      userId: user.id,
+      amount,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return c.json({ amount });
+  } catch (err) {
+    console.error("Update quota target error:", err);
+    return c.json({ error: "Failed to update quota target" }, 500);
   }
 });
 

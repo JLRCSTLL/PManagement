@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
 import { LogOut, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { ThemeToggle } from './ThemeToggle';
 
 export function Header() {
   const { user, signOut } = useAuth();
@@ -30,6 +31,7 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-4">
+          <ThemeToggle />
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <User className="w-4 h-4" />
             <span>{user?.email} ({user?.role})</span>

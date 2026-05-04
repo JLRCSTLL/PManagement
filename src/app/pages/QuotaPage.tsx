@@ -190,6 +190,8 @@ function normalizeQuotaResponse(payload: any): QuotaResponse {
       averageProposalValue: toNumber(payload?.quotaMetrics?.averageProposalValue),
       averageProjectValue: toNumber(payload?.quotaMetrics?.averageProjectValue),
     },
+    userQuotaTarget: toNumber(payload?.userQuotaTarget),
+    userQuotaProgressPercent: toNumber(payload?.userQuotaProgressPercent),
     statusBreakdown: {
       all: payload?.statusBreakdown?.all || {},
       proposals: payload?.statusBreakdown?.proposals || {},
@@ -242,6 +244,8 @@ function matchesDateRange(project: Project, fromDate: string, toDate: string): b
 export function QuotaPage() {
   const [data, setData] = useState<QuotaResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingQuotaTarget, setIsSavingQuotaTarget] = useState(false);
+  const [quotaTargetInput, setQuotaTargetInput] = useState('');
   const [activeTab, setActiveTab] = useState<QuotaTab>('all');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -264,6 +268,11 @@ export function QuotaPage() {
     loadQuotaData();
   }, []);
 
+  useEffect(() => {
+    if (!data) return;
+    setQuotaTargetInput(data.userQuotaTarget > 0 ? data.userQuotaTarget.toFixed(2) : '');
+  }, [data?.userQuotaTarget]);
+
   async function loadQuotaData() {
     setIsLoading(true);
     try {
@@ -274,6 +283,39 @@ export function QuotaPage() {
       console.error('Load quota data error:', error);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleSaveQuotaTarget() {
+    if (!data) return;
+    const parsed = Number(quotaTargetInput);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      toast.error('Enter a valid quota amount');
+      return;
+    }
+
+    const normalizedAmount = Math.round(parsed * 100) / 100;
+    setIsSavingQuotaTarget(true);
+    try {
+      const { amount } = await apiClient.updateQuotaTarget(normalizedAmount);
+      setData((prev) => {
+        if (!prev) return prev;
+        const quotaTarget = Number.isFinite(amount) ? Math.max(0, amount) : normalizedAmount;
+        const progressPercent = quotaTarget > 0
+          ? Number(Math.min(100, (prev.summary.grandTotal / quotaTarget) * 100).toFixed(2))
+          : 0;
+        return {
+          ...prev,
+          userQuotaTarget: quotaTarget,
+          userQuotaProgressPercent: progressPercent,
+        };
+      });
+      setQuotaTargetInput((Number.isFinite(amount) ? amount : normalizedAmount).toFixed(2));
+      toast.success('Quota target saved');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save quota target');
+    } finally {
+      setIsSavingQuotaTarget(false);
     }
   }
 
@@ -511,6 +553,47 @@ export function QuotaPage() {
           Pipeline and delivery summary for proposals and active projects.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>My Quota Target</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+            <div className="space-y-1.5 md:col-span-2">
+              <Label htmlFor="quotaTargetAmount">Quota Amount</Label>
+              <Input
+                id="quotaTargetAmount"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Enter target amount"
+                value={quotaTargetInput}
+                onChange={(event) => setQuotaTargetInput(event.target.value)}
+              />
+            </div>
+            <Button onClick={handleSaveQuotaTarget} disabled={isSavingQuotaTarget}>
+              {isSavingQuotaTarget ? 'Saving...' : 'Save Target'}
+            </Button>
+          </div>
+
+          <div className="rounded-md border p-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">Current Target</span>
+              <span className="font-semibold text-gray-900">
+                {amountFormatter.format(data.userQuotaTarget || 0)}
+              </span>
+            </div>
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                <span>Attainment</span>
+                <span>{data.userQuotaProgressPercent.toFixed(2)}%</span>
+              </div>
+              <Progress value={Math.max(0, Math.min(100, data.userQuotaProgressPercent || 0))} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {summaryCards.map((card) => (

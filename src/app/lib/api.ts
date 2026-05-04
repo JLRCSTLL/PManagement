@@ -6,6 +6,24 @@ interface ApiOptions {
   requiresAuth?: boolean;
 }
 
+export interface AppSettings {
+  organizationName: string;
+  dashboardSubtitle: string;
+  timezone: string;
+  defaultCurrency: 'PHP' | 'USD' | 'EUR';
+  dateFormat: 'YYYY-MM-DD' | 'MMM dd, yyyy' | 'dd/MM/yyyy';
+  weekStartsOn: 'monday' | 'sunday';
+  defaultProjectVisibility: 'team_only' | 'all_teams';
+  enableTaskDueReminders: boolean;
+  reminderLeadDays: number;
+  enableDailySummary: boolean;
+  dailySummaryTime: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export type AppSettingsPayload = Omit<AppSettings, 'updatedAt' | 'updatedBy'>;
+
 export class ApiClient {
   private normalizeProjectPayload(project: any) {
     if (!project || typeof project !== 'object') return project;
@@ -181,6 +199,8 @@ export class ApiClient {
     return this.request<{
       summary: any;
       quotaMetrics: any;
+      userQuotaTarget?: number;
+      userQuotaProgressPercent?: number;
       statusBreakdown: { all: Record<string, number>; proposals: Record<string, number>; projects: Record<string, number> };
       groupedTotals: { byClient: any[]; byAccountManager: any[]; byTeam: any[] };
       monthlyTrend: any[];
@@ -189,6 +209,13 @@ export class ApiClient {
       projects: any[];
     }>('/quota', {
       method: 'GET',
+    });
+  }
+
+  async updateQuotaTarget(amount: number) {
+    return this.request<{ amount: number }>('/quota-target', {
+      method: 'PUT',
+      body: JSON.stringify({ amount }),
     });
   }
 
@@ -216,6 +243,20 @@ export class ApiClient {
     return this.request<{ project: any }>(`/projects/${id}/notes`, {
       method: 'POST',
       body: JSON.stringify({ note }),
+    });
+  }
+
+  // Settings
+  async getSettings() {
+    return this.request<{ settings: AppSettings }>('/settings', {
+      method: 'GET',
+    });
+  }
+
+  async updateSettings(payload: AppSettingsPayload) {
+    return this.request<{ settings: AppSettings }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
     });
   }
 

@@ -186,6 +186,8 @@ export interface QuotaMonthlyTrend {
 export interface QuotaResponse {
   summary: QuotaSummary;
   quotaMetrics: QuotaMetrics;
+  userQuotaTarget: number;
+  userQuotaProgressPercent: number;
   statusBreakdown: {
     all: Record<string, number>;
     proposals: Record<string, number>;
