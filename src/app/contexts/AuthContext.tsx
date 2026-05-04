@@ -24,6 +24,26 @@ function normalizeRole(value: unknown): User['role'] {
   return 'user';
 }
 
+function normalizeTeams(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return values
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function resolveTeamInfo(source: any): { team: string; teams: string[] } {
+  const teams = normalizeTeams(source?.teams);
+  const team = typeof source?.team === 'string' ? source.team.trim() : '';
+  if (team && !teams.includes(team)) {
+    teams.unshift(team);
+  }
+  return {
+    team: team || teams[0] || '',
+    teams,
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -35,23 +55,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function resolveUserProfile(sessionUser: any): Promise<User> {
+    const sessionTeamInfo = resolveTeamInfo(sessionUser?.user_metadata);
     const fallback: User = {
       id: sessionUser.id,
       email: sessionUser.email || '',
       name: sessionUser.user_metadata?.name || 'User',
       role: 'user',
       isActive: true,
+      team: sessionTeamInfo.team,
+      teams: sessionTeamInfo.teams,
     };
 
     try {
       const { apiClient } = await import('../lib/api');
       const { user } = await apiClient.getMe();
+      const apiTeamInfo = resolveTeamInfo(user);
       return {
         id: user.id || fallback.id,
         email: user.email || fallback.email,
         name: user.name || fallback.name,
         role: normalizeRole(user.role),
         isActive: user.isActive ?? true,
+        team: apiTeamInfo.team || fallback.team,
+        teams: apiTeamInfo.teams.length > 0 ? apiTeamInfo.teams : fallback.teams,
       };
     } catch {
       return fallback;

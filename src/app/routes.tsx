@@ -51,7 +51,7 @@ export const router = createBrowserRouter([
       {
         path: "av-schedule",
         element: (
-          <ProtectedRoute>
+          <ProtectedRoute requiredTeam="AV">
             <AVSchedulePage />
           </ProtectedRoute>
         ),

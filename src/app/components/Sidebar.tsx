@@ -12,23 +12,36 @@ const baseItems = [
   { path: '/av-schedule', label: 'AV Schedule', icon: CalendarDays },
 ];
 
+function hasAvTeamAccess(user: ReturnType<typeof useAuth>['user']) {
+  const teams = [
+    ...(Array.isArray(user?.teams) ? user.teams : []),
+    typeof user?.team === 'string' ? user.team : '',
+  ]
+    .map((team) => team.trim().toLowerCase())
+    .filter(Boolean);
+  return teams.includes('av');
+}
+
 export function Sidebar() {
   const location = useLocation();
   const { user } = useAuth();
+  const navItems = hasAvTeamAccess(user)
+    ? baseItems
+    : baseItems.filter((item) => item.path !== '/av-schedule');
 
   const items = user?.role === 'admin'
     ? [
-        ...baseItems,
+        ...navItems,
         { path: '/users', label: 'Users', icon: Users },
         { path: '/settings/team-department', label: 'Teams', icon: Users2 },
         { path: '/settings', label: 'Settings', icon: Settings },
       ]
     : user?.role === 'team_lead'
     ? [
-        ...baseItems,
+        ...navItems,
         { path: '/settings/team-department', label: 'Team/Department Settings', icon: Shield },
       ]
-    : baseItems;
+    : navItems;
 
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
