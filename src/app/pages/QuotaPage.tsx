@@ -703,6 +703,11 @@ export function QuotaPage() {
     ? 'Projects Summary'
     : 'All Records Summary';
 
+  const currentTargetProjectAmount = Math.max(0, toNumber(data.summary.projectAmount));
+  const currentTargetProgressPercent = data.userQuotaTarget > 0
+    ? Number(Math.min(100, (currentTargetProjectAmount / data.userQuotaTarget) * 100).toFixed(2))
+    : 0;
+
   return (
     <div className="space-y-6">
       <div>
@@ -744,10 +749,10 @@ export function QuotaPage() {
             </div>
             <div className="mt-3">
               <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                <span>Attainment</span>
-                <span>{data.userQuotaProgressPercent.toFixed(2)}%</span>
+                <span>Progress (Project Amount)</span>
+                <span>{amountFormatter.format(currentTargetProjectAmount)}</span>
               </div>
-              <Progress value={Math.max(0, Math.min(100, data.userQuotaProgressPercent || 0))} />
+              <Progress value={currentTargetProgressPercent} />
             </div>
           </div>
         </CardContent>
