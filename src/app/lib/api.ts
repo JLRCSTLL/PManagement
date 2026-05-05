@@ -37,6 +37,7 @@ export type AppSettingsPayload = Omit<AppSettings, 'updatedAt' | 'updatedBy'>;
 export interface UserSettings {
   preferredTheme: 'system' | 'light' | 'dark';
   themePreset: 'default' | 'ocean' | 'forest' | 'sunset' | 'slate';
+  backgroundPreset: 'clean' | 'soft-grid' | 'mesh' | 'dots' | 'waves';
   timezone: string;
   dateFormat: 'YYYY-MM-DD' | 'MMM dd, yyyy' | 'dd/MM/yyyy';
   emailNotificationsEnabled: boolean;
@@ -46,6 +47,152 @@ export interface UserSettings {
 }
 
 export type UserSettingsPayload = Omit<UserSettings, 'updatedAt'>;
+
+export type TicketPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+export type TicketImpact = 'Low' | 'Medium' | 'High';
+export type TicketUrgency = 'Low' | 'Medium' | 'High';
+export type TicketStatus =
+  | 'Open'
+  | 'Assigned'
+  | 'In Progress'
+  | 'Pending User'
+  | 'Pending Vendor'
+  | 'Resolved'
+  | 'Closed'
+  | 'Cancelled';
+export type TicketSource = 'Portal' | 'Email' | 'Phone' | 'Walk-in' | 'API';
+export type TicketSlaStatus = 'On Track' | 'At Risk' | 'Breached' | 'Paused' | 'Completed';
+
+export interface TicketAttachment {
+  id: string;
+  name: string;
+  url: string;
+  mimeType?: string;
+  size?: number;
+  uploadedBy: string;
+  uploadedAt: string;
+}
+
+export interface TicketComment {
+  id: string;
+  ticketId: string;
+  authorId: string;
+  authorName?: string;
+  visibility: 'public' | 'internal';
+  message: string;
+  attachments: TicketAttachment[];
+  createdAt: string;
+}
+
+export interface TicketAuditEntry {
+  id: string;
+  ticketId: string;
+  actorId: string;
+  actorName?: string;
+  action: string;
+  oldValue: any;
+  newValue: any;
+  createdAt: string;
+}
+
+export interface TicketSla {
+  firstResponseDueAt: string;
+  resolutionDueAt: string;
+  firstResponseAt?: string;
+  resolutionAt?: string;
+  pausedAt?: string;
+  firstResponseStatus: TicketSlaStatus;
+  resolutionStatus: TicketSlaStatus;
+}
+
+export interface Ticket {
+  id: string;
+  ticketNumber: string;
+  title: string;
+  description: string;
+  address: string;
+  soNumber: string;
+  category: string;
+  subcategory: string;
+  priority: TicketPriority;
+  impact: TicketImpact;
+  urgency: TicketUrgency;
+  status: TicketStatus;
+  requesterId: string;
+  requesterName?: string;
+  assignedAgentId: string;
+  assignedAgentName?: string;
+  assignedGroup: string;
+  source: TicketSource;
+  attachments: TicketAttachment[];
+  dueDate: string;
+  firstResponseDueAt: string;
+  resolutionDueAt: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+  closedAt?: string;
+  sla: TicketSla;
+  comments?: TicketComment[];
+  audits?: TicketAuditEntry[];
+}
+
+export type TicketCreatePayload = {
+  title: string;
+  description: string;
+  address?: string;
+  soNumber?: string;
+  category: string;
+  subcategory?: string;
+  priority: TicketPriority;
+  impact: TicketImpact;
+  urgency: TicketUrgency;
+  source?: TicketSource;
+  assignedAgentId?: string;
+  assignedGroup?: string;
+  dueDate?: string;
+  attachments?: TicketAttachment[];
+};
+
+export type TicketUpdatePayload = Partial<{
+  title: string;
+  description: string;
+  address: string;
+  soNumber: string;
+  category: string;
+  subcategory: string;
+  priority: TicketPriority;
+  impact: TicketImpact;
+  urgency: TicketUrgency;
+  status: TicketStatus;
+  assignedAgentId: string;
+  assignedGroup: string;
+  dueDate: string;
+  attachments: TicketAttachment[];
+}>;
+
+export interface TicketSettings {
+  categories: Array<{
+    id: string;
+    name: string;
+    subcategories: string[];
+    isActive: boolean;
+  }>;
+  slaRules: Record<TicketPriority, { firstResponseMinutes: number; resolutionMinutes: number; businessDays: boolean }>;
+}
+
+export interface TicketDashboardStats {
+  totalOpenTickets: number;
+  ticketsAssignedToMe: number;
+  criticalTickets: number;
+  slaBreachedTickets: number;
+  slaAtRiskTickets: number;
+  ticketsResolvedToday: number;
+  averageFirstResponseMinutes: number;
+  averageResolutionMinutes: number;
+  byStatus: Record<string, number>;
+  byPriority: Record<string, number>;
+}
 
 export class ApiClient {
   private normalizeProjectPayload(project: any) {
@@ -436,6 +583,65 @@ export class ApiClient {
   async getDashboardStats() {
     return this.request<{ stats: any }>('/dashboard/stats', {
       method: 'GET',
+    });
+  }
+
+  // Tickets
+  async getTickets(params?: Record<string, string | number | boolean | undefined>) {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(params || {})) {
+      if (value === undefined || value === null || value === '') continue;
+      search.set(key, String(value));
+    }
+    const query = search.toString();
+    return this.request<{ tickets: Ticket[]; total: number; page: number; pageSize: number }>(`/tickets${query ? `?${query}` : ''}`, {
+      method: 'GET',
+    });
+  }
+
+  async getTicketById(id: string) {
+    return this.request<{ ticket: Ticket }>(`/tickets/${id}`, {
+      method: 'GET',
+    });
+  }
+
+  async createTicket(payload: TicketCreatePayload) {
+    return this.request<{ ticket: Ticket }>('/tickets', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateTicket(id: string, payload: TicketUpdatePayload) {
+    return this.request<{ ticket: Ticket }>(`/tickets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async addTicketComment(id: string, payload: { visibility: 'public' | 'internal'; message: string; attachments?: TicketAttachment[] }) {
+    return this.request<{ comment: TicketComment; ticket: Ticket }>(`/tickets/${id}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getTicketDashboard() {
+    return this.request<{ stats: TicketDashboardStats }>('/tickets/dashboard', {
+      method: 'GET',
+    });
+  }
+
+  async getTicketSettings() {
+    return this.request<TicketSettings>('/tickets/settings', {
+      method: 'GET',
+    });
+  }
+
+  async updateTicketSettings(payload: TicketSettings) {
+    return this.request<TicketSettings>('/tickets/settings', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
     });
   }
 }

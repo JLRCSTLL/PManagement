@@ -46,6 +46,13 @@
   --app-primary-800: #1e40af;
   --app-primary-900: #1e3a8a;
   --app-gradient-end-100: #e0e7ff;
+  --app-primary-foreground: #ffffff;
+  --app-secondary-50: #eef2ff;
+  --app-secondary-100: #e0e7ff;
+  --app-secondary-700: #4338ca;
+  --app-bg-image: none;
+  --app-bg-size: auto;
+  --app-bg-attachment: scroll;
 }
 
 .dark {
@@ -93,6 +100,9 @@
   --app-primary-800: #155e75;
   --app-primary-900: #164e63;
   --app-gradient-end-100: #e0f2fe;
+  --app-secondary-50: #ecfeff;
+  --app-secondary-100: #dbeafe;
+  --app-secondary-700: #1d4ed8;
 }
 
 :root[data-app-theme='forest'] {
@@ -103,6 +113,9 @@
   --app-primary-800: #166534;
   --app-primary-900: #14532d;
   --app-gradient-end-100: #ecfccb;
+  --app-secondary-50: #f7fee7;
+  --app-secondary-100: #ecfccb;
+  --app-secondary-700: #3f6212;
 }
 
 :root[data-app-theme='sunset'] {
@@ -113,6 +126,9 @@
   --app-primary-800: #9a3412;
   --app-primary-900: #7c2d12;
   --app-gradient-end-100: #ffedd5;
+  --app-secondary-50: #fff7ed;
+  --app-secondary-100: #fee2e2;
+  --app-secondary-700: #b45309;
 }
 
 :root[data-app-theme='slate'] {
@@ -123,6 +139,73 @@
   --app-primary-800: #1e293b;
   --app-primary-900: #0f172a;
   --app-gradient-end-100: #e2e8f0;
+  --app-secondary-50: #f8fafc;
+  --app-secondary-100: #e2e8f0;
+  --app-secondary-700: #334155;
+}
+
+:root[data-app-bg='clean'] {
+  --app-bg-image: none;
+  --app-bg-size: auto;
+  --app-bg-attachment: scroll;
+}
+
+:root[data-app-bg='soft-grid'] {
+  --app-bg-image:
+    linear-gradient(to right, color-mix(in oklab, var(--app-primary-100) 34%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--app-primary-100) 34%, transparent) 1px, transparent 1px);
+  --app-bg-size: 28px 28px;
+  --app-bg-attachment: fixed;
+}
+
+:root[data-app-bg='mesh'] {
+  --app-bg-image:
+    radial-gradient(circle at 10% 15%, color-mix(in oklab, var(--app-primary-100) 42%, transparent) 0%, transparent 45%),
+    radial-gradient(circle at 85% 5%, color-mix(in oklab, var(--app-secondary-100) 42%, transparent) 0%, transparent 44%),
+    radial-gradient(circle at 75% 78%, color-mix(in oklab, var(--app-primary-50) 54%, transparent) 0%, transparent 42%);
+  --app-bg-size: cover;
+  --app-bg-attachment: fixed;
+}
+
+:root[data-app-bg='dots'] {
+  --app-bg-image: radial-gradient(circle, color-mix(in oklab, var(--app-primary-100) 54%, transparent) 1.2px, transparent 1.2px);
+  --app-bg-size: 22px 22px;
+  --app-bg-attachment: fixed;
+}
+
+:root[data-app-bg='waves'] {
+  --app-bg-image:
+    repeating-radial-gradient(
+      circle at 0% 100%,
+      color-mix(in oklab, var(--app-primary-100) 32%, transparent) 0px,
+      color-mix(in oklab, var(--app-primary-100) 32%, transparent) 8px,
+      transparent 8px,
+      transparent 22px
+    );
+  --app-bg-size: 44px 44px;
+  --app-bg-attachment: fixed;
+}
+
+:root[data-app-theme] {
+  --primary: var(--app-primary-600);
+  --primary-foreground: var(--app-primary-foreground);
+  --ring: var(--app-primary-600);
+  --sidebar-primary: var(--app-primary-700);
+  --sidebar-ring: var(--app-primary-600);
+  --chart-1: var(--app-primary-700);
+  --chart-2: var(--app-primary-600);
+  --chart-3: var(--app-secondary-700);
+  --chart-4: var(--app-primary-800);
+  --chart-5: var(--app-primary-900);
+}
+
+:root.dark[data-app-theme],
+.dark[data-app-theme] {
+  --primary: color-mix(in oklab, var(--app-primary-100) 88%, white 12%);
+  --primary-foreground: oklch(0.205 0 0);
+  --ring: color-mix(in oklab, var(--app-primary-100) 70%, var(--color-foreground) 30%);
+  --sidebar-primary: color-mix(in oklab, var(--app-primary-100) 72%, white 28%);
+  --sidebar-ring: color-mix(in oklab, var(--app-primary-100) 70%, var(--color-foreground) 30%);
 }
 
 @theme inline {
@@ -173,6 +256,9 @@
 
   body {
     @apply bg-background text-foreground;
+    background-image: var(--app-bg-image);
+    background-size: var(--app-bg-size);
+    background-attachment: var(--app-bg-attachment);
   }
 
   /**
@@ -256,6 +342,14 @@
     border-color: var(--app-primary-600);
   }
 
+  [data-app-theme] .bg-indigo-100 {
+    background-color: var(--app-secondary-100);
+  }
+
+  [data-app-theme] .text-indigo-700 {
+    color: var(--app-secondary-700);
+  }
+
   [data-app-theme] .from-blue-50 {
     --tw-gradient-from: var(--app-primary-50) var(--tw-gradient-from-position);
     --tw-gradient-to: rgb(255 255 255 / 0) var(--tw-gradient-to-position);
@@ -310,5 +404,10 @@
   .dark [data-app-theme] .text-blue-700,
   .dark[data-app-theme] .text-blue-700 {
     color: color-mix(in oklab, var(--app-primary-100) 88%, white 12%);
+  }
+
+  .dark [data-app-theme] .text-indigo-700,
+  .dark[data-app-theme] .text-indigo-700 {
+    color: color-mix(in oklab, var(--app-secondary-100) 88%, white 12%);
   }
 }

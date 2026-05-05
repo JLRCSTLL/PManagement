@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router';
-import { CalendarDays, CheckSquare, Folder, LayoutDashboard, Settings, Shield, Target, Users, Users2 } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckSquare, Folder, Gauge, LayoutDashboard, LifeBuoy, Settings, Shield, Target, Users, Users2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../components/ui/utils';
 import { TabAccessKey } from '../lib/tabAccess';
@@ -11,6 +11,8 @@ const baseItems = [
   { path: '/projects', label: 'Projects', icon: Folder, tabKey: 'projects' as TabAccessKey },
   { path: '/quota', label: 'Quota', icon: Target, tabKey: 'quota' as TabAccessKey },
   { path: '/tasks', label: 'Tasks', icon: CheckSquare, tabKey: 'tasks' as TabAccessKey },
+  { path: '/tickets/dashboard', label: 'Ticket Dashboard', icon: Gauge, tabKey: 'dashboard' as TabAccessKey },
+  { path: '/tickets/my', label: 'My Tickets', icon: LifeBuoy, tabKey: 'tasks' as TabAccessKey },
   { path: '/av-schedule', label: 'AV Schedule', icon: CalendarDays, tabKey: 'av_schedule' as TabAccessKey },
 ];
 
@@ -23,6 +25,9 @@ export function Sidebar() {
   const items = user?.role === 'admin'
     ? [
         ...navItems,
+        { path: '/tickets/queue', label: 'Ticket Queue', icon: LifeBuoy },
+        { path: '/tickets/sla', label: 'SLA Queue', icon: AlertTriangle },
+        { path: '/settings/tickets', label: 'Ticket Settings', icon: Shield },
         ...(canAccessTab('users') ? [{ path: '/users', label: 'Users', icon: Users }] : []),
         ...(canAccessTab('team_settings') ? [{ path: '/settings/team-department', label: 'Teams', icon: Users2 }] : []),
         ...(canAccessTab('workspace_settings') ? [{ path: '/settings', label: 'Workspace Settings', icon: Shield }] : []),
@@ -30,6 +35,8 @@ export function Sidebar() {
     : user?.role === 'team_lead'
     ? [
         ...navItems,
+        { path: '/tickets/queue', label: 'Ticket Queue', icon: LifeBuoy },
+        { path: '/tickets/sla', label: 'SLA Queue', icon: AlertTriangle },
         ...(canAccessTab('team_settings') ? [{ path: '/settings/team-department', label: 'Team/Department Settings', icon: Shield }] : []),
       ]
     : navItems;

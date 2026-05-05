@@ -185,6 +185,7 @@ const DEFAULT_APP_SETTINGS = {
 const DEFAULT_USER_SETTINGS = {
   preferredTheme: "system" as "system" | "light" | "dark",
   themePreset: "default" as "default" | "ocean" | "forest" | "sunset" | "slate",
+  backgroundPreset: "clean" as "clean" | "soft-grid" | "mesh" | "dots" | "waves",
   timezone: "Asia/Manila",
   dateFormat: "YYYY-MM-DD" as "YYYY-MM-DD" | "MMM dd, yyyy" | "dd/MM/yyyy",
   emailNotificationsEnabled: true,
@@ -230,6 +231,7 @@ const AppSettingsStorageSchema = AppSettingsPayloadSchema.extend({
 const UserSettingsPayloadSchema = z.object({
   preferredTheme: z.enum(["system", "light", "dark"]).default(DEFAULT_USER_SETTINGS.preferredTheme),
   themePreset: z.enum(["default", "ocean", "forest", "sunset", "slate"]).default(DEFAULT_USER_SETTINGS.themePreset),
+  backgroundPreset: z.enum(["clean", "soft-grid", "mesh", "dots", "waves"]).default(DEFAULT_USER_SETTINGS.backgroundPreset),
   timezone: z.string().trim().min(1).max(80).default(DEFAULT_USER_SETTINGS.timezone),
   dateFormat: z.enum(["YYYY-MM-DD", "MMM dd, yyyy", "dd/MM/yyyy"]).default(DEFAULT_USER_SETTINGS.dateFormat),
   emailNotificationsEnabled: z.boolean().default(DEFAULT_USER_SETTINGS.emailNotificationsEnabled),
@@ -240,6 +242,144 @@ const UserSettingsPayloadSchema = z.object({
 const UserSettingsStorageSchema = UserSettingsPayloadSchema.extend({
   updatedAt: z.string().optional().default(() => new Date().toISOString()),
 });
+
+const TicketPrioritySchema = z.enum(["Low", "Medium", "High", "Critical"]);
+const TicketImpactSchema = z.enum(["Low", "Medium", "High"]);
+const TicketUrgencySchema = z.enum(["Low", "Medium", "High"]);
+const TicketStatusSchema = z.enum([
+  "Open",
+  "Assigned",
+  "In Progress",
+  "Pending User",
+  "Pending Vendor",
+  "Resolved",
+  "Closed",
+  "Cancelled",
+]);
+const TicketSourceSchema = z.enum(["Portal", "Email", "Phone", "Walk-in", "API"]);
+const TicketCommentVisibilitySchema = z.enum(["public", "internal"]);
+const TicketSlaStatusSchema = z.enum(["On Track", "At Risk", "Breached", "Paused", "Completed"]);
+
+const TicketAttachmentSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().trim().min(1).max(255),
+  url: z.string().trim().url(),
+  mimeType: z.string().optional().default(""),
+  size: z.number().min(0).optional(),
+  uploadedBy: z.string().optional().default(""),
+  uploadedAt: z.string().optional(),
+});
+
+const TicketCommentPayloadSchema = z.object({
+  visibility: TicketCommentVisibilitySchema.default("public"),
+  message: z.string().trim().min(1).max(5000),
+  attachments: z.array(TicketAttachmentSchema).optional().default([]),
+});
+
+const TicketCreatePayloadSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().min(1).max(10000),
+  address: z.string().trim().max(300).optional().default(""),
+  soNumber: z.string().trim().max(80).optional().default(""),
+  category: z.string().trim().min(1).max(100),
+  subcategory: z.string().trim().max(120).optional().default(""),
+  priority: TicketPrioritySchema.default("Medium"),
+  impact: TicketImpactSchema.default("Medium"),
+  urgency: TicketUrgencySchema.default("Medium"),
+  source: TicketSourceSchema.default("Portal"),
+  assignedAgentId: z.string().optional().default(""),
+  assignedGroup: z.string().optional().default(""),
+  dueDate: z.string().optional().default(""),
+  attachments: z.array(TicketAttachmentSchema).optional().default([]),
+});
+
+const TicketUpdatePayloadSchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  description: z.string().trim().min(1).max(10000).optional(),
+  address: z.string().trim().max(300).optional(),
+  soNumber: z.string().trim().max(80).optional(),
+  category: z.string().trim().min(1).max(100).optional(),
+  subcategory: z.string().trim().max(120).optional(),
+  priority: TicketPrioritySchema.optional(),
+  impact: TicketImpactSchema.optional(),
+  urgency: TicketUrgencySchema.optional(),
+  status: TicketStatusSchema.optional(),
+  assignedAgentId: z.string().optional(),
+  assignedGroup: z.string().optional(),
+  dueDate: z.string().optional(),
+  attachments: z.array(TicketAttachmentSchema).optional(),
+});
+
+const TicketSlaRuleSchema = z.object({
+  firstResponseMinutes: z.number().int().min(1).max(14 * 24 * 60),
+  resolutionMinutes: z.number().int().min(1).max(60 * 24 * 60),
+  businessDays: z.boolean().default(false),
+});
+
+const TicketSettingsSchema = z.object({
+  categories: z.array(
+    z.object({
+      id: z.string().optional(),
+      name: z.string().trim().min(1).max(100),
+      subcategories: z.array(z.string().trim().min(1).max(120)).default([]),
+      isActive: z.boolean().default(true),
+    }),
+  ).default([]),
+  slaRules: z.object({
+    Low: TicketSlaRuleSchema,
+    Medium: TicketSlaRuleSchema,
+    High: TicketSlaRuleSchema,
+    Critical: TicketSlaRuleSchema,
+  }),
+});
+
+const DEFAULT_TICKET_SETTINGS = {
+  categories: [
+    {
+      id: "cat-software",
+      name: "Software",
+      subcategories: ["Installation", "Bug", "Account Access", "License"],
+      isActive: true,
+    },
+    {
+      id: "cat-hardware",
+      name: "Hardware",
+      subcategories: ["Laptop", "Desktop", "Printer", "Peripheral"],
+      isActive: true,
+    },
+    {
+      id: "cat-network",
+      name: "Network",
+      subcategories: ["VPN", "Wi-Fi", "LAN", "Firewall"],
+      isActive: true,
+    },
+    {
+      id: "cat-service-request",
+      name: "Service Request",
+      subcategories: ["New User", "Access Request", "Change Request"],
+      isActive: true,
+    },
+  ],
+  slaRules: {
+    Critical: { firstResponseMinutes: 15, resolutionMinutes: 4 * 60, businessDays: false },
+    High: { firstResponseMinutes: 60, resolutionMinutes: 8 * 60, businessDays: false },
+    Medium: { firstResponseMinutes: 4 * 60, resolutionMinutes: 2 * 24 * 60, businessDays: true },
+    Low: { firstResponseMinutes: 8 * 60, resolutionMinutes: 5 * 24 * 60, businessDays: true },
+  },
+};
+
+const TICKET_PENDING_STATUSES = new Set(["Pending User", "Pending Vendor"]);
+const TICKET_ACTIVE_STATUSES = new Set(["Assigned", "In Progress"]);
+const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
+  Open: ["Assigned", "In Progress", "Pending User", "Pending Vendor", "Resolved", "Cancelled"],
+  Assigned: ["In Progress", "Pending User", "Pending Vendor", "Resolved", "Cancelled"],
+  "In Progress": ["Assigned", "Pending User", "Pending Vendor", "Resolved", "Cancelled"],
+  "Pending User": ["Assigned", "In Progress", "Resolved", "Cancelled"],
+  "Pending Vendor": ["Assigned", "In Progress", "Resolved", "Cancelled"],
+  Resolved: ["Closed", "Assigned", "In Progress"],
+  Closed: [],
+  Cancelled: [],
+};
 
 function normalizeDate(value: unknown): string {
   if (typeof value !== "string") return "";
@@ -1041,6 +1181,418 @@ function normalizeUserSettingsRecord(settings: any) {
   }
 
   return parsed.data;
+}
+
+function sanitizeText(value: unknown, max = 10000): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim().slice(0, max);
+  return trimmed.replace(/[<>]/g, "");
+}
+
+function parseIsoDate(value: unknown): Date | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function toIso(value: Date): string {
+  return value.toISOString();
+}
+
+function addBusinessMinutes(start: Date, minutes: number): Date {
+  const result = new Date(start.getTime());
+  let remaining = Math.max(0, Math.round(minutes));
+  while (remaining > 0) {
+    result.setUTCMinutes(result.getUTCMinutes() + 1);
+    const day = result.getUTCDay();
+    if (day === 0 || day === 6) continue;
+    remaining -= 1;
+  }
+  return result;
+}
+
+function addMinutesWithRule(start: Date, minutes: number, businessDays: boolean): Date {
+  return businessDays ? addBusinessMinutes(start, minutes) : new Date(start.getTime() + minutes * 60_000);
+}
+
+function getTicketSettingsDefaults() {
+  return structuredClone(DEFAULT_TICKET_SETTINGS);
+}
+
+function normalizeTicketSettingsRecord(raw: any) {
+  const source = unwrapStoredValue(raw) ?? raw;
+  const parsed = TicketSettingsSchema.safeParse(source);
+  if (!parsed.success) return getTicketSettingsDefaults();
+  return parsed.data;
+}
+
+async function readTicketSettings() {
+  const stored = await kv.get("settings:tickets");
+  if (!stored) return getTicketSettingsDefaults();
+  return normalizeTicketSettingsRecord(stored);
+}
+
+function normalizeTicketAttachment(raw: any, actorId: string) {
+  const parsed = TicketAttachmentSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  return {
+    id: parsed.data.id || crypto.randomUUID(),
+    name: sanitizeText(parsed.data.name, 255),
+    url: parsed.data.url,
+    mimeType: sanitizeText(parsed.data.mimeType || "", 120),
+    size: typeof parsed.data.size === "number" ? parsed.data.size : undefined,
+    uploadedBy: parsed.data.uploadedBy || actorId,
+    uploadedAt: parsed.data.uploadedAt || new Date().toISOString(),
+  };
+}
+
+function createSlaObject(priority: "Low" | "Medium" | "High" | "Critical", createdAtIso: string, settings: any) {
+  const createdAt = parseIsoDate(createdAtIso) || new Date();
+  const rule = settings.slaRules?.[priority] || DEFAULT_TICKET_SETTINGS.slaRules[priority];
+  const firstDue = addMinutesWithRule(createdAt, rule.firstResponseMinutes, Boolean(rule.businessDays));
+  const resolutionDue = addMinutesWithRule(createdAt, rule.resolutionMinutes, Boolean(rule.businessDays));
+  return {
+    firstResponseDueAt: toIso(firstDue),
+    resolutionDueAt: toIso(resolutionDue),
+    firstResponseAt: "",
+    resolutionAt: "",
+    pausedAt: "",
+    firstResponseStatus: "On Track" as const,
+    resolutionStatus: "On Track" as const,
+  };
+}
+
+function computeSlaStatusForDeadline(dueAt: string, completedAt: string, pausedAt: string, now = new Date()): "On Track" | "At Risk" | "Breached" | "Paused" | "Completed" {
+  if (completedAt) return "Completed";
+  if (pausedAt) return "Paused";
+
+  const dueDate = parseIsoDate(dueAt);
+  if (!dueDate) return "On Track";
+  const diffMs = dueDate.getTime() - now.getTime();
+  if (diffMs <= 0) return "Breached";
+  if (diffMs <= 60 * 60 * 1000) return "At Risk";
+  return "On Track";
+}
+
+function normalizeTicketRecord(raw: any) {
+  const source = unwrapStoredValue(raw) ?? raw;
+  if (!source || typeof source !== "object" || typeof source.id !== "string") return null;
+  const createdAt = typeof source.createdAt === "string" ? source.createdAt : new Date().toISOString();
+  const updatedAt = typeof source.updatedAt === "string" ? source.updatedAt : createdAt;
+  const priority = source.priority === "Low" || source.priority === "Medium" || source.priority === "High" || source.priority === "Critical"
+    ? source.priority
+    : "Medium";
+  const status = TicketStatusSchema.safeParse(source.status).success ? source.status : "Open";
+  const impact = source.impact === "Low" || source.impact === "Medium" || source.impact === "High" ? source.impact : "Medium";
+  const urgency = source.urgency === "Low" || source.urgency === "Medium" || source.urgency === "High" ? source.urgency : "Medium";
+  const sourceChannel = TicketSourceSchema.safeParse(source.source).success ? source.source : "Portal";
+  const dueDate = typeof source.dueDate === "string" ? source.dueDate : "";
+
+  const attachments = Array.isArray(source.attachments)
+    ? source.attachments
+        .map((entry: any) => normalizeTicketAttachment(entry, source.requesterId || ""))
+        .filter((entry: any) => Boolean(entry))
+    : [];
+
+  const sla = source.sla && typeof source.sla === "object"
+    ? {
+        firstResponseDueAt: typeof source.sla.firstResponseDueAt === "string" ? source.sla.firstResponseDueAt : createdAt,
+        resolutionDueAt: typeof source.sla.resolutionDueAt === "string" ? source.sla.resolutionDueAt : createdAt,
+        firstResponseAt: typeof source.sla.firstResponseAt === "string" ? source.sla.firstResponseAt : "",
+        resolutionAt: typeof source.sla.resolutionAt === "string" ? source.sla.resolutionAt : "",
+        pausedAt: typeof source.sla.pausedAt === "string" ? source.sla.pausedAt : "",
+        firstResponseStatus: "On Track" as const,
+        resolutionStatus: "On Track" as const,
+      }
+    : createSlaObject(priority, createdAt, getTicketSettingsDefaults());
+
+  sla.firstResponseStatus = computeSlaStatusForDeadline(sla.firstResponseDueAt, sla.firstResponseAt, sla.pausedAt);
+  sla.resolutionStatus = computeSlaStatusForDeadline(sla.resolutionDueAt, sla.resolutionAt, sla.pausedAt);
+
+  return {
+    id: source.id,
+    ticketNumber: typeof source.ticketNumber === "string" ? source.ticketNumber : "",
+    title: sanitizeText(source.title, 200),
+    description: sanitizeText(source.description, 10000),
+    address: sanitizeText(source.address, 300),
+    soNumber: sanitizeText(source.soNumber, 80),
+    category: sanitizeText(source.category, 100),
+    subcategory: sanitizeText(source.subcategory, 120),
+    priority,
+    impact,
+    urgency,
+    status,
+    requesterId: typeof source.requesterId === "string" ? source.requesterId : "",
+    assignedAgentId: typeof source.assignedAgentId === "string" ? source.assignedAgentId : "",
+    assignedGroup: normalizeTeamName(source.assignedGroup),
+    source: sourceChannel,
+    attachments,
+    dueDate,
+    firstResponseDueAt: sla.firstResponseDueAt,
+    resolutionDueAt: sla.resolutionDueAt,
+    createdAt,
+    updatedAt,
+    resolvedAt: typeof source.resolvedAt === "string" ? source.resolvedAt : "",
+    closedAt: typeof source.closedAt === "string" ? source.closedAt : "",
+    sla,
+  };
+}
+
+function normalizeTicketCommentRecord(raw: any) {
+  const source = unwrapStoredValue(raw) ?? raw;
+  if (!source || typeof source !== "object" || typeof source.id !== "string") return null;
+  const visibility = source.visibility === "internal" ? "internal" : "public";
+  const attachments = Array.isArray(source.attachments)
+    ? source.attachments
+        .map((entry: any) => normalizeTicketAttachment(entry, source.authorId || ""))
+        .filter((entry: any) => Boolean(entry))
+    : [];
+  return {
+    id: source.id,
+    ticketId: typeof source.ticketId === "string" ? source.ticketId : "",
+    authorId: typeof source.authorId === "string" ? source.authorId : "",
+    visibility,
+    message: sanitizeText(source.message, 5000),
+    attachments,
+    createdAt: typeof source.createdAt === "string" ? source.createdAt : new Date().toISOString(),
+  };
+}
+
+function normalizeTicketAuditRecord(raw: any) {
+  const source = unwrapStoredValue(raw) ?? raw;
+  if (!source || typeof source !== "object" || typeof source.id !== "string") return null;
+  return {
+    id: source.id,
+    ticketId: typeof source.ticketId === "string" ? source.ticketId : "",
+    actorId: typeof source.actorId === "string" ? source.actorId : "",
+    action: sanitizeText(source.action, 200),
+    oldValue: source.oldValue ?? null,
+    newValue: source.newValue ?? null,
+    createdAt: typeof source.createdAt === "string" ? source.createdAt : new Date().toISOString(),
+  };
+}
+
+async function readTickets() {
+  const rows = await kv.getByPrefix("ticket:");
+  const tickets = rows
+    .map((row) => normalizeTicketRecord(unwrapStoredValue(row)))
+    .filter((entry): entry is any => Boolean(entry));
+  return dedupeById(tickets);
+}
+
+async function readTicketComments(ticketId: string) {
+  const rows = await kv.getByPrefix(`ticket-comment:${ticketId}:`);
+  return rows
+    .map((row) => normalizeTicketCommentRecord(unwrapStoredValue(row)))
+    .filter((entry): entry is any => Boolean(entry))
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+async function readTicketAudits(ticketId: string) {
+  const rows = await kv.getByPrefix(`ticket-audit:${ticketId}:`);
+  return rows
+    .map((row) => normalizeTicketAuditRecord(unwrapStoredValue(row)))
+    .filter((entry): entry is any => Boolean(entry))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+async function createTicketAudit(ticketId: string, actorId: string, action: string, oldValue: any, newValue: any) {
+  const createdAt = new Date().toISOString();
+  const id = crypto.randomUUID();
+  await kv.set(`ticket-audit:${ticketId}:${createdAt}:${id}`, {
+    id,
+    ticketId,
+    actorId,
+    action,
+    oldValue,
+    newValue,
+    createdAt,
+  });
+}
+
+async function createTicketNotification(userId: string, payload: { ticketId: string; event: string; message: string; actorId: string }) {
+  if (!userId) return;
+  const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+  await kv.set(`ticket-notification:${userId}:${createdAt}:${id}`, {
+    id,
+    userId,
+    ticketId: payload.ticketId,
+    event: payload.event,
+    message: sanitizeText(payload.message, 300),
+    actorId: payload.actorId,
+    createdAt,
+    readAt: "",
+  });
+}
+
+async function readTicketNotifications(userId: string) {
+  const rows = await kv.getByPrefix(`ticket-notification:${userId}:`);
+  return rows
+    .map((row) => unwrapStoredValue(row))
+    .filter((entry: any) => entry && typeof entry === "object" && typeof entry.id === "string")
+    .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+}
+
+function canViewTicket(ticket: any, user: any, role: AppRole): boolean {
+  if (role === "admin") return true;
+  const userId = user?.id || "";
+  if (ticket.requesterId === userId) return true;
+  if (ticket.assignedAgentId === userId) return true;
+  const userTeams = getUserTeams(user).map((team) => normalizeTeamName(team).toLowerCase());
+  const assignedGroup = normalizeTeamName(ticket.assignedGroup).toLowerCase();
+  if (role === "team_lead" && assignedGroup && userTeams.includes(assignedGroup)) return true;
+  return false;
+}
+
+function canManageTicket(ticket: any, user: any, role: AppRole): boolean {
+  if (role === "admin") return true;
+  const userId = user?.id || "";
+  if (ticket.assignedAgentId === userId) return true;
+  if (role === "team_lead") {
+    const userTeams = getUserTeams(user).map((team) => normalizeTeamName(team).toLowerCase());
+    const assignedGroup = normalizeTeamName(ticket.assignedGroup).toLowerCase();
+    return !!assignedGroup && userTeams.includes(assignedGroup);
+  }
+  return false;
+}
+
+function canCloseTicket(ticket: any, user: any, role: AppRole): boolean {
+  if (role === "admin") return true;
+  const userId = user?.id || "";
+  return ticket.requesterId === userId || ticket.assignedAgentId === userId || role === "team_lead";
+}
+
+function isTicketAgentUser(user: any, role: AppRole, ticket: any): boolean {
+  if (role === "admin" || role === "team_lead") return true;
+  const userId = user?.id || "";
+  return ticket.assignedAgentId === userId;
+}
+
+function ensureTicketTransition(fromStatus: string, toStatus: string, actorCanOverride = false) {
+  if (fromStatus === toStatus) return true;
+  if (actorCanOverride) return true;
+  const allowed = TICKET_STATUS_TRANSITIONS[fromStatus] || [];
+  return allowed.includes(toStatus);
+}
+
+function applySlaPauseResume(current: any, nextStatus: string) {
+  const now = new Date();
+  const currentStatus = current.status;
+  const currentPaused = typeof current.sla?.pausedAt === "string" ? current.sla.pausedAt : "";
+  const enteringPending = TICKET_PENDING_STATUSES.has(nextStatus) && !TICKET_PENDING_STATUSES.has(currentStatus);
+  const leavingPending = TICKET_ACTIVE_STATUSES.has(nextStatus) && TICKET_PENDING_STATUSES.has(currentStatus);
+
+  if (enteringPending && !currentPaused) {
+    current.sla.pausedAt = now.toISOString();
+    return;
+  }
+
+  if (leavingPending && currentPaused) {
+    const pausedAt = parseIsoDate(currentPaused);
+    if (pausedAt) {
+      const diffMs = Math.max(0, now.getTime() - pausedAt.getTime());
+      if (!current.sla.firstResponseAt) {
+        const firstDue = parseIsoDate(current.sla.firstResponseDueAt);
+        if (firstDue) current.sla.firstResponseDueAt = new Date(firstDue.getTime() + diffMs).toISOString();
+      }
+      if (!current.sla.resolutionAt) {
+        const resolutionDue = parseIsoDate(current.sla.resolutionDueAt);
+        if (resolutionDue) current.sla.resolutionDueAt = new Date(resolutionDue.getTime() + diffMs).toISOString();
+      }
+    }
+    current.sla.pausedAt = "";
+  }
+
+  if ((nextStatus === "Resolved" || nextStatus === "Closed" || nextStatus === "Cancelled") && currentPaused) {
+    current.sla.pausedAt = "";
+  }
+}
+
+function computeTicketSlaFlags(ticket: any) {
+  ticket.sla.firstResponseStatus = computeSlaStatusForDeadline(
+    ticket.sla.firstResponseDueAt,
+    ticket.sla.firstResponseAt,
+    ticket.sla.pausedAt,
+  );
+  ticket.sla.resolutionStatus = computeSlaStatusForDeadline(
+    ticket.sla.resolutionDueAt,
+    ticket.sla.resolutionAt,
+    ticket.sla.pausedAt,
+  );
+}
+
+function serializeTicket(ticket: any, directory: Record<string, string>) {
+  const normalized = normalizeTicketRecord(ticket);
+  if (!normalized) return null;
+  return {
+    ...normalized,
+    requesterName: resolveUserName(normalized.requesterId, directory, normalized.requesterId),
+    assignedAgentName: resolveUserName(normalized.assignedAgentId, directory, normalized.assignedAgentId),
+  };
+}
+
+async function buildTicketDashboardStats(user: any, role: AppRole) {
+  const tickets = (await readTickets())
+    .filter((ticket) => canViewTicket(ticket, user, role))
+    .map((ticket) => {
+      computeTicketSlaFlags(ticket);
+      return ticket;
+    });
+
+  const now = new Date();
+  const startToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const resolvedToday = tickets.filter((ticket) => {
+    const resolvedAt = parseIsoDate(ticket.resolvedAt || "");
+    return resolvedAt ? resolvedAt.getTime() >= startToday.getTime() : false;
+  });
+
+  const firstResponseDurations = tickets
+    .filter((ticket) => ticket.sla?.firstResponseAt)
+    .map((ticket) => {
+      const start = parseIsoDate(ticket.createdAt);
+      const end = parseIsoDate(ticket.sla.firstResponseAt);
+      if (!start || !end) return null;
+      return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000));
+    })
+    .filter((value): value is number => typeof value === "number");
+
+  const resolutionDurations = tickets
+    .filter((ticket) => ticket.sla?.resolutionAt)
+    .map((ticket) => {
+      const start = parseIsoDate(ticket.createdAt);
+      const end = parseIsoDate(ticket.sla.resolutionAt);
+      if (!start || !end) return null;
+      return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000));
+    })
+    .filter((value): value is number => typeof value === "number");
+
+  const byStatus = tickets.reduce((acc, ticket) => {
+    acc[ticket.status] = (acc[ticket.status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const byPriority = tickets.reduce((acc, ticket) => {
+    acc[ticket.priority] = (acc[ticket.priority] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return {
+    totalOpenTickets: tickets.filter((ticket) => !["Closed", "Cancelled"].includes(ticket.status)).length,
+    ticketsAssignedToMe: tickets.filter((ticket) => ticket.assignedAgentId === user.id).length,
+    criticalTickets: tickets.filter((ticket) => ticket.priority === "Critical" && ticket.status !== "Closed").length,
+    slaBreachedTickets: tickets.filter((ticket) => ticket.sla.firstResponseStatus === "Breached" || ticket.sla.resolutionStatus === "Breached").length,
+    slaAtRiskTickets: tickets.filter((ticket) => ticket.sla.firstResponseStatus === "At Risk" || ticket.sla.resolutionStatus === "At Risk").length,
+    ticketsResolvedToday: resolvedToday.length,
+    averageFirstResponseMinutes: firstResponseDurations.length > 0
+      ? Number((firstResponseDurations.reduce((sum, value) => sum + value, 0) / firstResponseDurations.length).toFixed(2))
+      : 0,
+    averageResolutionMinutes: resolutionDurations.length > 0
+      ? Number((resolutionDurations.reduce((sum, value) => sum + value, 0) / resolutionDurations.length).toFixed(2))
+      : 0,
+    byStatus,
+    byPriority,
+  };
 }
 
 function dedupeById<T extends { id: string; createdAt?: string; updatedAt?: string }>(records: T[]): T[] {
@@ -2785,6 +3337,525 @@ app.delete("/server/av-schedule/:id", async (c) => {
   } catch (err) {
     console.error("Delete AV schedule error:", err);
     return c.json({ error: "Failed to delete AV schedule" }, 500);
+  }
+});
+
+// ==================== TICKET ROUTES ====================
+
+app.get("/server/tickets/settings", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const settings = await readTicketSettings();
+    return c.json(settings);
+  } catch (err) {
+    console.error("Get ticket settings error:", err);
+    return c.json({ error: "Failed to fetch ticket settings" }, 500);
+  }
+});
+
+app.get("/server/tickets/notifications", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const notifications = await readTicketNotifications(user.id);
+    return c.json({ notifications });
+  } catch (err) {
+    console.error("Get ticket notifications error:", err);
+    return c.json({ error: "Failed to fetch ticket notifications" }, 500);
+  }
+});
+
+app.put("/server/tickets/notifications/:id/read", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const targetId = c.req.param("id");
+    const records = await readTicketNotifications(user.id);
+    const existing = records.find((entry: any) => entry.id === targetId);
+    if (!existing) return c.json({ error: "Notification not found" }, 404);
+    const next = { ...existing, readAt: new Date().toISOString() };
+    await kv.set(`ticket-notification:${user.id}:${existing.createdAt}:${existing.id}`, next);
+    return c.json({ notification: next });
+  } catch (err) {
+    console.error("Mark notification read error:", err);
+    return c.json({ error: "Failed to update notification" }, 500);
+  }
+});
+
+app.put("/server/tickets/settings", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    if (role !== "admin") return c.json({ error: "Forbidden" }, 403);
+
+    const parsed = TicketSettingsSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+
+    const payload = {
+      categories: parsed.data.categories.map((entry) => ({
+        id: entry.id || `cat-${crypto.randomUUID().slice(0, 8)}`,
+        name: sanitizeText(entry.name, 100),
+        subcategories: normalizeStringArray(entry.subcategories).map((value) => sanitizeText(value, 120)),
+        isActive: entry.isActive !== false,
+      })),
+      slaRules: parsed.data.slaRules,
+    };
+
+    await kv.set("settings:tickets", payload);
+    return c.json(payload);
+  } catch (err) {
+    console.error("Update ticket settings error:", err);
+    return c.json({ error: "Failed to update ticket settings" }, 500);
+  }
+});
+
+app.get("/server/tickets", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    const directory = await getUserDirectoryFast();
+
+    const query = c.req.query();
+    const page = Math.max(1, Number(query.page || 1) || 1);
+    const pageSize = Math.max(1, Math.min(100, Number(query.pageSize || 25) || 25));
+    const search = sanitizeText(query.search || "", 100).toLowerCase();
+    const statusFilter = sanitizeText(query.status || "", 50);
+    const priorityFilter = sanitizeText(query.priority || "", 50);
+    const assignedAgentFilter = sanitizeText(query.assignedAgentId || "", 100);
+    const categoryFilter = sanitizeText(query.category || "", 100);
+    const queueMode = sanitizeText(query.queue || "", 30).toLowerCase();
+    const sortBy = sanitizeText(query.sortBy || "createdAt", 30);
+    const sortOrder = sanitizeText(query.sortOrder || "desc", 10).toLowerCase() === "asc" ? "asc" : "desc";
+    const mineOnly = String(query.mine || "").toLowerCase() === "true";
+
+    let records = (await readTickets())
+      .filter((ticket) => canViewTicket(ticket, user, role))
+      .map((ticket) => {
+        computeTicketSlaFlags(ticket);
+        return ticket;
+      });
+
+    if (mineOnly) {
+      records = records.filter((ticket) => ticket.requesterId === user.id || ticket.assignedAgentId === user.id);
+    }
+    if (statusFilter) {
+      records = records.filter((ticket) => ticket.status === statusFilter);
+    }
+    if (priorityFilter) {
+      records = records.filter((ticket) => ticket.priority === priorityFilter);
+    }
+    if (assignedAgentFilter) {
+      records = records.filter((ticket) => ticket.assignedAgentId === assignedAgentFilter);
+    }
+    if (categoryFilter) {
+      records = records.filter((ticket) => ticket.category === categoryFilter);
+    }
+    if (search) {
+      records = records.filter((ticket) =>
+        ticket.ticketNumber.toLowerCase().includes(search) ||
+        ticket.title.toLowerCase().includes(search) ||
+        ticket.description.toLowerCase().includes(search) ||
+        (ticket.address || "").toLowerCase().includes(search) ||
+        (ticket.soNumber || "").toLowerCase().includes(search) ||
+        (ticket.category || "").toLowerCase().includes(search),
+      );
+    }
+
+    if (queueMode === "breached") {
+      records = records.filter((ticket) => ticket.sla.firstResponseStatus === "Breached" || ticket.sla.resolutionStatus === "Breached");
+    } else if (queueMode === "at-risk") {
+      records = records.filter((ticket) =>
+        ticket.sla.firstResponseStatus === "At Risk" ||
+        ticket.sla.resolutionStatus === "At Risk" ||
+        ticket.sla.firstResponseStatus === "Breached" ||
+        ticket.sla.resolutionStatus === "Breached");
+    }
+
+    records.sort((a, b) => {
+      const multiplier = sortOrder === "asc" ? 1 : -1;
+      if (sortBy === "priority") {
+        const score = (value: string) => value === "Critical" ? 4 : value === "High" ? 3 : value === "Medium" ? 2 : 1;
+        return (score(a.priority) - score(b.priority)) * multiplier;
+      }
+      if (sortBy === "slaDue") {
+        const aDue = new Date(a.resolutionDueAt || a.createdAt).getTime();
+        const bDue = new Date(b.resolutionDueAt || b.createdAt).getTime();
+        return (aDue - bDue) * multiplier;
+      }
+      const aTs = new Date((a as any)[sortBy] || a.createdAt).getTime();
+      const bTs = new Date((b as any)[sortBy] || b.createdAt).getTime();
+      return (aTs - bTs) * multiplier;
+    });
+
+    const total = records.length;
+    const start = (page - 1) * pageSize;
+    const paged = records.slice(start, start + pageSize).map((ticket) => serializeTicket(ticket, directory)).filter(Boolean);
+    return c.json({ tickets: paged, total, page, pageSize });
+  } catch (err) {
+    console.error("Get tickets error:", err);
+    return c.json({ error: "Failed to fetch tickets" }, 500);
+  }
+});
+
+app.post("/server/tickets", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    const parsed = TicketCreatePayloadSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+
+    const settings = await readTicketSettings();
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const ymd = now.slice(0, 10).replace(/-/g, "");
+    const ticketNumber = `TKT-${ymd}-${id.slice(0, 6).toUpperCase()}`;
+    const assignedGroup = normalizeTeamName(parsed.data.assignedGroup) || normalizeTeamName(getUserTeams(user)[0] || "");
+    const attachments = parsed.data.attachments
+      .map((entry) => normalizeTicketAttachment(entry, user.id))
+      .filter((entry: any) => Boolean(entry));
+    const assignedAgentId = parsed.data.assignedAgentId || "";
+    const startStatus = assignedAgentId || assignedGroup ? "Assigned" : "Open";
+    const initialSla = createSlaObject(parsed.data.priority, now, settings);
+    const ticket = normalizeTicketRecord({
+      id,
+      ticketNumber,
+      title: parsed.data.title,
+      description: parsed.data.description,
+      address: parsed.data.address,
+      soNumber: parsed.data.soNumber,
+      category: parsed.data.category,
+      subcategory: parsed.data.subcategory,
+      priority: parsed.data.priority,
+      impact: parsed.data.impact,
+      urgency: parsed.data.urgency,
+      status: startStatus,
+      requesterId: user.id,
+      assignedAgentId,
+      assignedGroup,
+      source: parsed.data.source || "Portal",
+      attachments,
+      dueDate: parsed.data.dueDate || "",
+      firstResponseDueAt: initialSla.firstResponseDueAt,
+      resolutionDueAt: initialSla.resolutionDueAt,
+      createdAt: now,
+      updatedAt: now,
+      resolvedAt: "",
+      closedAt: "",
+      sla: initialSla,
+    });
+
+    if (!ticket) return c.json({ error: "Invalid ticket payload" }, 400);
+    computeTicketSlaFlags(ticket);
+    await kv.set(`ticket:${id}`, ticket);
+    await createTicketAudit(id, user.id, "ticket_created", null, {
+      ticketNumber: ticket.ticketNumber,
+      status: ticket.status,
+      priority: ticket.priority,
+    });
+    if (ticket.assignedAgentId) {
+      await createTicketNotification(ticket.assignedAgentId, {
+        ticketId: id,
+        event: "ticket_assigned",
+        message: `You were assigned ticket ${ticket.ticketNumber}.`,
+        actorId: user.id,
+      });
+    }
+    const directory = await getUserDirectoryFast();
+    return c.json({ ticket: serializeTicket(ticket, directory) });
+  } catch (err) {
+    console.error("Create ticket error:", err);
+    return c.json({ error: "Failed to create ticket" }, 500);
+  }
+});
+
+app.get("/server/tickets/:id", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    const id = c.req.param("id");
+    if (id === "dashboard") {
+      const stats = await buildTicketDashboardStats(user, role);
+      return c.json({ stats });
+    }
+    const ticket = (await readTickets()).find((entry) => entry.id === id);
+    if (!ticket) return c.json({ error: "Ticket not found" }, 404);
+    if (!canViewTicket(ticket, user, role)) return c.json({ error: "Forbidden" }, 403);
+
+    computeTicketSlaFlags(ticket);
+    const [commentsRaw, auditsRaw, directory] = await Promise.all([
+      readTicketComments(id),
+      readTicketAudits(id),
+      getUserDirectoryFast(),
+    ]);
+    const comments = commentsRaw
+      .filter((entry) => entry.visibility === "public" || canManageTicket(ticket, user, role) || role === "admin" || role === "team_lead")
+      .map((entry) => ({
+        ...entry,
+        authorName: resolveUserName(entry.authorId, directory, entry.authorId),
+      }));
+    const audits = auditsRaw.map((entry) => ({
+      ...entry,
+      actorName: resolveUserName(entry.actorId, directory, entry.actorId),
+    }));
+    const serialized = serializeTicket(ticket, directory);
+    return c.json({
+      ticket: {
+        ...serialized,
+        comments,
+        audits,
+      },
+    });
+  } catch (err) {
+    console.error("Get ticket detail error:", err);
+    return c.json({ error: "Failed to fetch ticket" }, 500);
+  }
+});
+
+app.put("/server/tickets/:id", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    const id = c.req.param("id");
+    const parsed = TicketUpdatePayloadSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+
+    const current = (await readTickets()).find((entry) => entry.id === id);
+    if (!current) return c.json({ error: "Ticket not found" }, 404);
+    const canManage = canManageTicket(current, user, role);
+    if (!canManage && current.requesterId !== user.id) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+    if (current.status === "Closed" && role !== "admin") {
+      return c.json({ error: "Closed tickets are read-only" }, 403);
+    }
+
+    const updates = parsed.data;
+    if (!canManage && role === "user") {
+      const updateKeys = Object.keys(updates);
+      const requesterAllowed = updateKeys.length > 0 &&
+        updateKeys.every((key) => key === "status") &&
+        updates.status === "Closed";
+      if (!requesterAllowed) {
+        return c.json({ error: "Requester cannot edit internal ticket fields" }, 403);
+      }
+    }
+    const next = { ...current, ...updates };
+    const oldAttachmentsJson = JSON.stringify(current.attachments || []);
+    next.title = updates.title !== undefined ? sanitizeText(updates.title, 200) : current.title;
+    next.description = updates.description !== undefined ? sanitizeText(updates.description, 10000) : current.description;
+    next.address = updates.address !== undefined ? sanitizeText(updates.address, 300) : current.address;
+    next.soNumber = updates.soNumber !== undefined ? sanitizeText(updates.soNumber, 80) : current.soNumber;
+    next.category = updates.category !== undefined ? sanitizeText(updates.category, 100) : current.category;
+    next.subcategory = updates.subcategory !== undefined ? sanitizeText(updates.subcategory, 120) : current.subcategory;
+    next.assignedGroup = updates.assignedGroup !== undefined ? normalizeTeamName(updates.assignedGroup) : current.assignedGroup;
+    if (updates.attachments) {
+      next.attachments = updates.attachments
+        .map((entry) => normalizeTicketAttachment(entry, user.id))
+        .filter((entry: any) => Boolean(entry));
+    }
+
+    if (updates.priority && updates.priority !== current.priority) {
+      const settings = await readTicketSettings();
+      const createdAt = current.createdAt || new Date().toISOString();
+      const existingFirstResponseAt = current.sla?.firstResponseAt || "";
+      const existingResolutionAt = current.sla?.resolutionAt || "";
+      const recreatedSla = createSlaObject(updates.priority, createdAt, settings);
+      next.sla = {
+        ...recreatedSla,
+        firstResponseAt: existingFirstResponseAt,
+        resolutionAt: existingResolutionAt,
+        pausedAt: current.sla?.pausedAt || "",
+      };
+    }
+
+    if (updates.status && updates.status !== current.status) {
+      const isRequester = current.requesterId === user.id;
+      if (updates.status === "Closed" && !canCloseTicket(current, user, role)) {
+        return c.json({ error: "Forbidden" }, 403);
+      }
+      if (!ensureTicketTransition(current.status, updates.status, role === "admin")) {
+        return c.json({ error: "Invalid status transition" }, 400);
+      }
+      if (isRequester && updates.status !== "Closed" && role === "user") {
+        return c.json({ error: "Requester can only close tickets" }, 403);
+      }
+      applySlaPauseResume(next, updates.status);
+      if (updates.status === "Resolved" && !next.resolvedAt) {
+        next.resolvedAt = new Date().toISOString();
+        if (!next.sla?.resolutionAt) {
+          next.sla.resolutionAt = next.resolvedAt;
+        }
+      }
+      if (updates.status === "Closed" && !next.closedAt) {
+        next.closedAt = new Date().toISOString();
+      }
+      if ((updates.status === "Assigned" || updates.status === "In Progress") && next.closedAt) {
+        next.closedAt = "";
+      }
+    }
+
+    next.updatedAt = new Date().toISOString();
+    computeTicketSlaFlags(next);
+    const normalized = normalizeTicketRecord(next);
+    if (!normalized) return c.json({ error: "Invalid ticket update" }, 400);
+    await kv.set(`ticket:${id}`, normalized);
+
+    const trackedFields: Array<keyof typeof normalized> = ["status", "priority", "assignedAgentId", "assignedGroup", "impact", "urgency", "category", "subcategory", "address", "soNumber"];
+    for (const field of trackedFields) {
+      if ((current as any)[field] !== (normalized as any)[field]) {
+        await createTicketAudit(id, user.id, `ticket_${String(field)}_changed`, (current as any)[field], (normalized as any)[field]);
+      }
+    }
+    if (JSON.stringify(normalized.attachments || []) !== oldAttachmentsJson) {
+      await createTicketAudit(id, user.id, "ticket_attachments_changed", current.attachments || [], normalized.attachments || []);
+    }
+    if (normalized.sla.firstResponseStatus === "Breached" && current.sla.firstResponseStatus !== "Breached") {
+      await createTicketAudit(id, user.id, "sla_first_response_breached", current.sla.firstResponseStatus, normalized.sla.firstResponseStatus);
+      await createTicketNotification(normalized.assignedAgentId || normalized.requesterId, {
+        ticketId: id,
+        event: "sla_first_response_breached",
+        message: `First response SLA breached for ${normalized.ticketNumber}.`,
+        actorId: user.id,
+      });
+    }
+    if (normalized.sla.resolutionStatus === "Breached" && current.sla.resolutionStatus !== "Breached") {
+      await createTicketAudit(id, user.id, "sla_resolution_breached", current.sla.resolutionStatus, normalized.sla.resolutionStatus);
+      await createTicketNotification(normalized.assignedAgentId || normalized.requesterId, {
+        ticketId: id,
+        event: "sla_resolution_breached",
+        message: `Resolution SLA breached for ${normalized.ticketNumber}.`,
+        actorId: user.id,
+      });
+    }
+    if (current.status !== normalized.status) {
+      await createTicketNotification(normalized.requesterId, {
+        ticketId: id,
+        event: "ticket_status_changed",
+        message: `${normalized.ticketNumber} status changed to ${normalized.status}.`,
+        actorId: user.id,
+      });
+    }
+    if (current.assignedAgentId !== normalized.assignedAgentId && normalized.assignedAgentId) {
+      await createTicketNotification(normalized.assignedAgentId, {
+        ticketId: id,
+        event: "ticket_assigned",
+        message: `You were assigned ticket ${normalized.ticketNumber}.`,
+        actorId: user.id,
+      });
+    }
+    if (!current.resolvedAt && normalized.resolvedAt) {
+      await createTicketNotification(normalized.requesterId, {
+        ticketId: id,
+        event: "ticket_resolved",
+        message: `${normalized.ticketNumber} was resolved.`,
+        actorId: user.id,
+      });
+    }
+
+    const directory = await getUserDirectoryFast();
+    return c.json({ ticket: serializeTicket(normalized, directory) });
+  } catch (err) {
+    console.error("Update ticket error:", err);
+    return c.json({ error: "Failed to update ticket" }, 500);
+  }
+});
+
+app.post("/server/tickets/:id/comments", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    const id = c.req.param("id");
+    const parsed = TicketCommentPayloadSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+
+    const ticket = (await readTickets()).find((entry) => entry.id === id);
+    if (!ticket) return c.json({ error: "Ticket not found" }, 404);
+    if (!canViewTicket(ticket, user, role)) return c.json({ error: "Forbidden" }, 403);
+    if (ticket.status === "Closed" && role !== "admin") return c.json({ error: "Closed tickets are read-only" }, 403);
+    if (parsed.data.visibility === "internal" && !canManageTicket(ticket, user, role) && role !== "admin" && role !== "team_lead") {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const createdAt = new Date().toISOString();
+    const commentId = crypto.randomUUID();
+    const comment = normalizeTicketCommentRecord({
+      id: commentId,
+      ticketId: id,
+      authorId: user.id,
+      visibility: parsed.data.visibility,
+      message: parsed.data.message,
+      attachments: parsed.data.attachments,
+      createdAt,
+    });
+    if (!comment) return c.json({ error: "Invalid comment payload" }, 400);
+
+    await kv.set(`ticket-comment:${id}:${createdAt}:${commentId}`, comment);
+    await createTicketAudit(id, user.id, "ticket_comment_added", null, {
+      visibility: comment.visibility,
+      messageLength: comment.message.length,
+    });
+    if (comment.visibility === "public" && ticket.requesterId && ticket.requesterId !== user.id) {
+      await createTicketNotification(ticket.requesterId, {
+        ticketId: id,
+        event: "ticket_public_reply",
+        message: `New reply on ${ticket.ticketNumber}.`,
+        actorId: user.id,
+      });
+    }
+
+    const current = { ...ticket };
+    if (
+      comment.visibility === "public" &&
+      !current.sla.firstResponseAt &&
+      isTicketAgentUser(user, role, current)
+    ) {
+      current.sla.firstResponseAt = createdAt;
+      current.updatedAt = createdAt;
+      computeTicketSlaFlags(current);
+      await kv.set(`ticket:${id}`, current);
+      await createTicketAudit(id, user.id, "ticket_first_response_marked", null, createdAt);
+    }
+
+    const directory = await getUserDirectoryFast();
+    const serializedTicket = serializeTicket(current, directory);
+    return c.json({
+      comment: {
+        ...comment,
+        authorName: resolveUserName(comment.authorId, directory, comment.authorId),
+      },
+      ticket: serializedTicket,
+    });
+  } catch (err) {
+    console.error("Add ticket comment error:", err);
+    return c.json({ error: "Failed to add ticket comment" }, 500);
+  }
+});
+
+app.get("/server/tickets/dashboard", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const role = getRoleFromUser(user);
+    const stats = await buildTicketDashboardStats(user, role);
+    return c.json({ stats });
+  } catch (err) {
+    console.error("Ticket dashboard error:", err);
+    return c.json({ error: "Failed to fetch ticket dashboard" }, 500);
   }
 });
 

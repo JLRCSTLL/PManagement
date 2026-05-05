@@ -6,7 +6,9 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "seed:rbac": "node scripts/seed-rbac.mjs"
+    "seed:rbac": "node scripts/seed-rbac.mjs",
+    "seed:tickets": "node scripts/seed-ticket-settings.mjs",
+    "test:ticketing": "node --test tests/ticketing.logic.test.mjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

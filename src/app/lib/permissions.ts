@@ -44,3 +44,15 @@ export function canEditTask(role: UserRole | undefined, task: Task, userId: stri
 export function canDeleteTask(role: UserRole | undefined, task: Task, userId: string | undefined): boolean {
   return canEditTask(role, task, userId);
 }
+
+export function canCreateTicket(role: UserRole | undefined): boolean {
+  return role === 'admin' || role === 'team_lead' || role === 'user';
+}
+
+export function canViewAllTickets(role: UserRole | undefined): boolean {
+  return role === 'admin' || role === 'team_lead';
+}
+
+export function canManageTicketSettings(role: UserRole | undefined): boolean {
+  return role === 'admin';
+}

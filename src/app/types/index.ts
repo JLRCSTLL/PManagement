@@ -208,3 +208,97 @@ export interface QuotaResponse {
   proposals: Project[];
   projects: Project[];
 }
+
+export type TicketPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+export type TicketImpact = 'Low' | 'Medium' | 'High';
+export type TicketUrgency = 'Low' | 'Medium' | 'High';
+export type TicketStatus = 'Open' | 'Assigned' | 'In Progress' | 'Pending User' | 'Pending Vendor' | 'Resolved' | 'Closed' | 'Cancelled';
+export type TicketSource = 'Portal' | 'Email' | 'Phone' | 'Walk-in' | 'API';
+export type TicketSlaStatus = 'On Track' | 'At Risk' | 'Breached' | 'Paused' | 'Completed';
+
+export interface TicketAttachment {
+  id: string;
+  name: string;
+  url: string;
+  mimeType?: string;
+  size?: number;
+  uploadedBy: string;
+  uploadedAt: string;
+}
+
+export interface TicketComment {
+  id: string;
+  ticketId: string;
+  authorId: string;
+  authorName?: string;
+  visibility: 'public' | 'internal';
+  message: string;
+  attachments: TicketAttachment[];
+  createdAt: string;
+}
+
+export interface TicketAuditEntry {
+  id: string;
+  ticketId: string;
+  actorId: string;
+  actorName?: string;
+  action: string;
+  oldValue: any;
+  newValue: any;
+  createdAt: string;
+}
+
+export interface TicketSla {
+  firstResponseDueAt: string;
+  resolutionDueAt: string;
+  firstResponseAt?: string;
+  resolutionAt?: string;
+  pausedAt?: string;
+  firstResponseStatus: TicketSlaStatus;
+  resolutionStatus: TicketSlaStatus;
+}
+
+export interface Ticket {
+  id: string;
+  ticketNumber: string;
+  title: string;
+  description: string;
+  address: string;
+  soNumber: string;
+  category: string;
+  subcategory: string;
+  priority: TicketPriority;
+  impact: TicketImpact;
+  urgency: TicketUrgency;
+  status: TicketStatus;
+  requesterId: string;
+  requesterName?: string;
+  assignedAgentId: string;
+  assignedAgentName?: string;
+  assignedGroup: string;
+  source: TicketSource;
+  attachments: TicketAttachment[];
+  dueDate: string;
+  firstResponseDueAt: string;
+  resolutionDueAt: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+  closedAt?: string;
+  sla: TicketSla;
+  comments?: TicketComment[];
+  audits?: TicketAuditEntry[];
+}
+
+export interface TicketDashboardStats {
+  totalOpenTickets: number;
+  ticketsAssignedToMe: number;
+  criticalTickets: number;
+  slaBreachedTickets: number;
+  slaAtRiskTickets: number;
+  ticketsResolvedToday: number;
+  averageFirstResponseMinutes: number;
+  averageResolutionMinutes: number;
+  byStatus: Record<string, number>;
+  byPriority: Record<string, number>;
+}

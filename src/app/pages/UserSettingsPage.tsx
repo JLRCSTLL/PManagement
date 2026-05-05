@@ -3,7 +3,14 @@ import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient, UserSettings, UserSettingsPayload } from '../lib/api';
-import { applyThemePreset, normalizeThemePreset, THEME_PRESET_OPTIONS } from '../lib/userTheme';
+import {
+  applyBackgroundPreset,
+  applyThemePreset,
+  BACKGROUND_PRESET_OPTIONS,
+  normalizeBackgroundPreset,
+  normalizeThemePreset,
+  THEME_PRESET_OPTIONS,
+} from '../lib/userTheme';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -13,6 +20,7 @@ import { Switch } from '../components/ui/switch';
 const DEFAULT_USER_SETTINGS: UserSettingsPayload = {
   preferredTheme: 'system',
   themePreset: 'default',
+  backgroundPreset: 'clean',
   timezone: 'Asia/Manila',
   dateFormat: 'YYYY-MM-DD',
   emailNotificationsEnabled: true,
@@ -25,6 +33,7 @@ function toPayload(raw: Partial<UserSettings> | null | undefined): UserSettingsP
   return {
     preferredTheme: raw.preferredTheme === 'dark' || raw.preferredTheme === 'light' ? raw.preferredTheme : 'system',
     themePreset: normalizeThemePreset(raw.themePreset),
+    backgroundPreset: normalizeBackgroundPreset(raw.backgroundPreset),
     timezone: typeof raw.timezone === 'string' && raw.timezone.trim() ? raw.timezone.trim() : DEFAULT_USER_SETTINGS.timezone,
     dateFormat: raw.dateFormat === 'MMM dd, yyyy' || raw.dateFormat === 'dd/MM/yyyy' ? raw.dateFormat : 'YYYY-MM-DD',
     emailNotificationsEnabled: raw.emailNotificationsEnabled !== false,
@@ -92,6 +101,7 @@ export function UserSettingsPage() {
       setDraftSettings(normalized);
       setTheme(normalized.preferredTheme);
       applyThemePreset(normalized.themePreset);
+      applyBackgroundPreset(normalized.backgroundPreset);
       setLastUpdatedAt(typeof settings?.updatedAt === 'string' ? settings.updatedAt : '');
     } catch (error: any) {
       toast.error(error.message || 'Failed to load user settings');
@@ -112,6 +122,7 @@ export function UserSettingsPage() {
         setDraftSettings(normalized);
         setTheme(normalized.preferredTheme);
         applyThemePreset(normalized.themePreset);
+        applyBackgroundPreset(normalized.backgroundPreset);
         setLastUpdatedAt(typeof settings?.updatedAt === 'string' ? settings.updatedAt : new Date().toISOString());
       }
 
@@ -141,6 +152,7 @@ export function UserSettingsPage() {
     setConfirmPassword('');
     setTheme(savedSettings.preferredTheme);
     applyThemePreset(savedSettings.themePreset);
+    applyBackgroundPreset(savedSettings.backgroundPreset);
   }
 
   if (isLoading) {
@@ -199,7 +211,7 @@ export function UserSettingsPage() {
 
       <div className="bg-white rounded-lg shadow p-5 space-y-5">
         <h2 className="text-lg font-semibold">Preferences</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="space-y-1.5">
             <Label>Theme</Label>
             <Select
@@ -231,6 +243,24 @@ export function UserSettingsPage() {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {THEME_PRESET_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Background</Label>
+            <Select
+              value={draftSettings.backgroundPreset}
+              onValueChange={(value) => {
+                const nextBackground = normalizeBackgroundPreset(value);
+                setDraftSettings((prev) => ({ ...prev, backgroundPreset: nextBackground }));
+                applyBackgroundPreset(nextBackground);
+              }}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {BACKGROUND_PRESET_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectContent>

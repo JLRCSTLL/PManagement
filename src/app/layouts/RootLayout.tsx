@@ -5,7 +5,7 @@ import { Header } from '../components/Header';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from 'next-themes';
 import { apiClient } from '../lib/api';
-import { applyThemePreset } from '../lib/userTheme';
+import { applyBackgroundPreset, applyThemePreset } from '../lib/userTheme';
 
 export function RootLayout() {
   const { user } = useAuth();
@@ -17,12 +17,14 @@ export function RootLayout() {
     async function applyUserTheme() {
       if (!user?.id) {
         applyThemePreset('default');
+        applyBackgroundPreset('clean');
         return;
       }
       try {
         const { settings } = await apiClient.getUserSettings();
         if (isCancelled) return;
         applyThemePreset(settings?.themePreset || 'default');
+        applyBackgroundPreset(settings?.backgroundPreset || 'clean');
         const preferredTheme = settings?.preferredTheme;
         if (preferredTheme === 'light' || preferredTheme === 'dark') {
           setTheme(preferredTheme);
