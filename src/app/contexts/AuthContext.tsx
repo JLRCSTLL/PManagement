@@ -10,6 +10,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -170,8 +171,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('access_token');
   }
 
+  async function refreshUser() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+    const userData = await resolveUserProfile(session.user);
+    setUser(userData);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, accessToken, isLoading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, accessToken, isLoading, signIn, signUp, signOut, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

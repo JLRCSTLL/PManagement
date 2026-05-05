@@ -1,11 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { apiClient, AppSettings, AppSettingsPayload } from '../lib/api';
 import { Button } from '../components/ui/button';
+import { Checkbox } from '../components/ui/checkbox';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Switch } from '../components/ui/switch';
+import { DEFAULT_TAB_ACCESS, normalizeTabAccess, TAB_ACCESS_METADATA, TabAccessKey } from '../lib/tabAccess';
+import { useTabAccess } from '../contexts/TabAccessContext';
 
 const DEFAULT_SETTINGS: AppSettingsPayload = {
   organizationName: 'Project Management',
@@ -19,6 +22,7 @@ const DEFAULT_SETTINGS: AppSettingsPayload = {
   reminderLeadDays: 3,
   enableDailySummary: false,
   dailySummaryTime: '09:00',
+  tabAccess: DEFAULT_TAB_ACCESS,
 };
 
 function toPayload(raw: Partial<AppSettings> | null | undefined): AppSettingsPayload {
@@ -47,14 +51,22 @@ function toPayload(raw: Partial<AppSettings> | null | undefined): AppSettingsPay
     reminderLeadDays: normalizedReminderLeadDays,
     enableDailySummary: raw.enableDailySummary === true,
     dailySummaryTime: normalizedSummaryTime,
+    tabAccess: normalizeTabAccess(raw.tabAccess),
   };
 }
 
+interface TeamOption {
+  key: string;
+  label: string;
+}
+
 export function SettingsPage() {
+  const { refreshTabAccess } = useTabAccess();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [savedSettings, setSavedSettings] = useState<AppSettingsPayload>({ ...DEFAULT_SETTINGS });
   const [draftSettings, setDraftSettings] = useState<AppSettingsPayload>({ ...DEFAULT_SETTINGS });
+  const [teamOptions, setTeamOptions] = useState<TeamOption[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState('');
 
   useEffect(() => {
@@ -78,11 +90,26 @@ export function SettingsPage() {
   async function loadSettings() {
     setIsLoading(true);
     try {
-      const { settings } = await apiClient.getSettings();
-      const normalized = toPayload(settings);
+      const [settingsResponse, teamsResponse] = await Promise.all([
+        apiClient.getSettings(),
+        apiClient.getTeams(),
+      ]);
+
+      const normalized = toPayload(settingsResponse.settings);
       setSavedSettings(normalized);
       setDraftSettings(normalized);
-      setLastUpdatedAt(typeof settings?.updatedAt === 'string' ? settings.updatedAt : '');
+      setLastUpdatedAt(typeof settingsResponse.settings?.updatedAt === 'string' ? settingsResponse.settings.updatedAt : '');
+
+      const teamMap = new Map<string, string>();
+      for (const rawTeam of teamsResponse.teams || []) {
+        const label = typeof rawTeam?.name === 'string' ? rawTeam.name.trim() : '';
+        if (!label) continue;
+        const key = label.toLowerCase();
+        if (!teamMap.has(key)) {
+          teamMap.set(key, label);
+        }
+      }
+      setTeamOptions(Array.from(teamMap.entries()).map(([key, label]) => ({ key, label })));
     } catch (error: any) {
       toast.error(error.message || 'Failed to load settings');
     } finally {
@@ -90,15 +117,50 @@ export function SettingsPage() {
     }
   }
 
+  function setAllTeamsAccess(tabKey: TabAccessKey, allTeamsEnabled: boolean) {
+    setDraftSettings((prev) => {
+      const nextTabAccess = { ...prev.tabAccess };
+      if (allTeamsEnabled) {
+        nextTabAccess[tabKey] = [];
+      } else {
+        const fallbackTeam = teamOptions[0]?.key;
+        nextTabAccess[tabKey] = fallbackTeam ? [fallbackTeam] : [];
+      }
+      return { ...prev, tabAccess: nextTabAccess };
+    });
+  }
+
+  function toggleTabTeam(tabKey: TabAccessKey, teamKey: string) {
+    setDraftSettings((prev) => {
+      const current = prev.tabAccess[tabKey] || [];
+      const exists = current.includes(teamKey);
+      const next = exists
+        ? current.filter((value) => value !== teamKey)
+        : [...current, teamKey];
+      return {
+        ...prev,
+        tabAccess: {
+          ...prev.tabAccess,
+          [tabKey]: next,
+        },
+      };
+    });
+  }
+
   async function handleSave() {
     if (!canSave) return;
     setIsSaving(true);
     try {
-      const { settings } = await apiClient.updateSettings(draftSettings);
+      const payload: AppSettingsPayload = {
+        ...draftSettings,
+        tabAccess: normalizeTabAccess(draftSettings.tabAccess),
+      };
+      const { settings } = await apiClient.updateSettings(payload);
       const normalized = toPayload(settings);
       setSavedSettings(normalized);
       setDraftSettings(normalized);
       setLastUpdatedAt(typeof settings?.updatedAt === 'string' ? settings.updatedAt : new Date().toISOString());
+      await refreshTabAccess();
       toast.success('Settings saved');
     } catch (error: any) {
       toast.error(error.message || 'Failed to save settings');
@@ -214,6 +276,50 @@ export function SettingsPage() {
               </SelectContent>
             </Select>
           </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow p-5 space-y-5">
+        <h2 className="text-lg font-semibold">Tab Access by Team</h2>
+        <p className="text-sm text-gray-500">Assign which teams can see and open each sidebar tab. Admin role still keeps full access.</p>
+        <div className="space-y-4">
+          {TAB_ACCESS_METADATA.map((tab) => {
+            const selectedTeams = draftSettings.tabAccess[tab.key] || [];
+            const allTeamsEnabled = selectedTeams.length === 0;
+            return (
+              <div key={tab.key} className="rounded-md border p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-gray-900">{tab.label}</p>
+                    <p className="text-sm text-gray-500">{tab.description}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">All Teams</span>
+                    <Switch
+                      checked={allTeamsEnabled}
+                      onCheckedChange={(checked) => setAllTeamsAccess(tab.key, checked)}
+                    />
+                  </div>
+                </div>
+                {!allTeamsEnabled ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {teamOptions.map((team) => (
+                      <label key={`${tab.key}-${team.key}`} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={selectedTeams.includes(team.key)}
+                          onCheckedChange={() => toggleTabTeam(tab.key, team.key)}
+                        />
+                        <span>{team.label}</span>
+                      </label>
+                    ))}
+                    {teamOptions.length === 0 ? (
+                      <p className="text-sm text-gray-500">No teams available yet. Create teams first.</p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </div>
 

@@ -3,43 +3,34 @@ import { Link, useLocation } from 'react-router';
 import { CalendarDays, CheckSquare, Folder, LayoutDashboard, Settings, Shield, Target, Users, Users2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../components/ui/utils';
+import { TabAccessKey } from '../lib/tabAccess';
+import { useTabAccess } from '../contexts/TabAccessContext';
 
 const baseItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/projects', label: 'Projects', icon: Folder },
-  { path: '/quota', label: 'Quota', icon: Target },
-  { path: '/tasks', label: 'Tasks', icon: CheckSquare },
-  { path: '/av-schedule', label: 'AV Schedule', icon: CalendarDays },
+  { path: '/', label: 'Dashboard', icon: LayoutDashboard, tabKey: 'dashboard' as TabAccessKey },
+  { path: '/projects', label: 'Projects', icon: Folder, tabKey: 'projects' as TabAccessKey },
+  { path: '/quota', label: 'Quota', icon: Target, tabKey: 'quota' as TabAccessKey },
+  { path: '/tasks', label: 'Tasks', icon: CheckSquare, tabKey: 'tasks' as TabAccessKey },
+  { path: '/av-schedule', label: 'AV Schedule', icon: CalendarDays, tabKey: 'av_schedule' as TabAccessKey },
 ];
-
-function hasAvTeamAccess(user: ReturnType<typeof useAuth>['user']) {
-  const teams = [
-    ...(Array.isArray(user?.teams) ? user.teams : []),
-    typeof user?.team === 'string' ? user.team : '',
-  ]
-    .map((team) => team.trim().toLowerCase())
-    .filter(Boolean);
-  return teams.includes('av');
-}
 
 export function Sidebar() {
   const location = useLocation();
   const { user } = useAuth();
-  const navItems = hasAvTeamAccess(user)
-    ? baseItems
-    : baseItems.filter((item) => item.path !== '/av-schedule');
+  const { canAccessTab } = useTabAccess();
+  const navItems = baseItems.filter((item) => canAccessTab(item.tabKey));
 
   const items = user?.role === 'admin'
     ? [
         ...navItems,
-        { path: '/users', label: 'Users', icon: Users },
-        { path: '/settings/team-department', label: 'Teams', icon: Users2 },
-        { path: '/settings', label: 'Settings', icon: Settings },
+        ...(canAccessTab('users') ? [{ path: '/users', label: 'Users', icon: Users }] : []),
+        ...(canAccessTab('team_settings') ? [{ path: '/settings/team-department', label: 'Teams', icon: Users2 }] : []),
+        ...(canAccessTab('workspace_settings') ? [{ path: '/settings', label: 'Workspace Settings', icon: Shield }] : []),
       ]
     : user?.role === 'team_lead'
     ? [
         ...navItems,
-        { path: '/settings/team-department', label: 'Team/Department Settings', icon: Shield },
+        ...(canAccessTab('team_settings') ? [{ path: '/settings/team-department', label: 'Team/Department Settings', icon: Shield }] : []),
       ]
     : navItems;
 
@@ -50,7 +41,7 @@ export function Sidebar() {
         <p className="text-sm text-gray-500 mt-1">Project and Schedule Management</p>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {items.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
@@ -72,6 +63,22 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="p-2 border-t border-gray-200 flex justify-start">
+        <Link
+          to="/my-settings"
+          aria-label="My Settings"
+          title="My Settings"
+          className={cn(
+            'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+            location.pathname === '/my-settings'
+              ? 'bg-blue-50 text-blue-700'
+              : 'text-gray-700 hover:bg-gray-100',
+          )}
+        >
+          <Settings className="w-5 h-5" />
+        </Link>
+      </div>
     </aside>
   );
 }

@@ -10,6 +10,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { TeamDepartmentSettingsPage } from "./pages/TeamDepartmentSettingsPage";
 import { AVSchedulePage } from "./pages/AVSchedulePage";
 import { QuotaPage } from "./pages/QuotaPage";
+import { UserSettingsPage } from "./pages/UserSettingsPage";
 
 export const router = createBrowserRouter([
   {
@@ -19,7 +20,7 @@ export const router = createBrowserRouter([
       {
         index: true,
         element: (
-          <ProtectedRoute>
+          <ProtectedRoute requiredTab="dashboard">
             <DashboardPage />
           </ProtectedRoute>
         ),
@@ -27,7 +28,7 @@ export const router = createBrowserRouter([
       {
         path: "projects",
         element: (
-          <ProtectedRoute>
+          <ProtectedRoute requiredTab="projects">
             <ProjectsPage />
           </ProtectedRoute>
         ),
@@ -35,7 +36,7 @@ export const router = createBrowserRouter([
       {
         path: "tasks",
         element: (
-          <ProtectedRoute>
+          <ProtectedRoute requiredTab="tasks">
             <TasksPage />
           </ProtectedRoute>
         ),
@@ -43,7 +44,7 @@ export const router = createBrowserRouter([
       {
         path: "quota",
         element: (
-          <ProtectedRoute>
+          <ProtectedRoute requiredTab="quota">
             <QuotaPage />
           </ProtectedRoute>
         ),
@@ -51,7 +52,7 @@ export const router = createBrowserRouter([
       {
         path: "av-schedule",
         element: (
-          <ProtectedRoute requiredTeam="AV">
+          <ProtectedRoute requiredTab="av_schedule">
             <AVSchedulePage />
           </ProtectedRoute>
         ),
@@ -59,7 +60,7 @@ export const router = createBrowserRouter([
       {
         path: "users",
         element: (
-          <ProtectedRoute requiredRole="admin">
+          <ProtectedRoute requiredRole="admin" requiredTab="users">
             <AdminUsersPage />
           </ProtectedRoute>
         ),
@@ -67,7 +68,7 @@ export const router = createBrowserRouter([
       {
         path: "admin/users",
         element: (
-          <ProtectedRoute requiredRole="admin">
+          <ProtectedRoute requiredRole="admin" requiredTab="users">
             <AdminUsersPage />
           </ProtectedRoute>
         ),
@@ -75,15 +76,23 @@ export const router = createBrowserRouter([
       {
         path: "settings",
         element: (
-          <ProtectedRoute requiredRole="admin">
+          <ProtectedRoute requiredRole="admin" requiredTab="workspace_settings">
             <SettingsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "my-settings",
+        element: (
+          <ProtectedRoute>
+            <UserSettingsPage />
           </ProtectedRoute>
         ),
       },
       {
         path: "settings/team-department",
         element: (
-          <ProtectedRoute requiredRoles={["admin", "team_lead"]}>
+          <ProtectedRoute requiredRoles={["admin", "team_lead"]} requiredTab="team_settings">
             <TeamDepartmentSettingsPage />
           </ProtectedRoute>
         ),

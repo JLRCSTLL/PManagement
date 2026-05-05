@@ -18,11 +18,34 @@ export interface AppSettings {
   reminderLeadDays: number;
   enableDailySummary: boolean;
   dailySummaryTime: string;
+  tabAccess: {
+    dashboard: string[];
+    projects: string[];
+    quota: string[];
+    tasks: string[];
+    av_schedule: string[];
+    users: string[];
+    team_settings: string[];
+    workspace_settings: string[];
+  };
   updatedAt?: string;
   updatedBy?: string;
 }
 
 export type AppSettingsPayload = Omit<AppSettings, 'updatedAt' | 'updatedBy'>;
+
+export interface UserSettings {
+  preferredTheme: 'system' | 'light' | 'dark';
+  themePreset: 'default' | 'ocean' | 'forest' | 'sunset' | 'slate';
+  timezone: string;
+  dateFormat: 'YYYY-MM-DD' | 'MMM dd, yyyy' | 'dd/MM/yyyy';
+  emailNotificationsEnabled: boolean;
+  taskReminderEmailEnabled: boolean;
+  dailySummaryEmailEnabled: boolean;
+  updatedAt?: string;
+}
+
+export type UserSettingsPayload = Omit<UserSettings, 'updatedAt'>;
 
 export class ApiClient {
   private normalizeProjectPayload(project: any) {
@@ -125,6 +148,13 @@ export class ApiClient {
   async getMe() {
     return this.request<{ user: any }>('/me', {
       method: 'GET',
+    });
+  }
+
+  async updateMe(payload: { name?: string; password?: string }) {
+    return this.request<{ user: any }>('/me', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
     });
   }
 
@@ -277,6 +307,25 @@ export class ApiClient {
 
   async updateSettings(payload: AppSettingsPayload) {
     return this.request<{ settings: AppSettings }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getNavigationSettings() {
+    return this.request<{ tabAccess: AppSettings['tabAccess'] }>('/navigation-settings', {
+      method: 'GET',
+    });
+  }
+
+  async getUserSettings() {
+    return this.request<{ settings: UserSettings }>('/user-settings', {
+      method: 'GET',
+    });
+  }
+
+  async updateUserSettings(payload: UserSettingsPayload) {
+    return this.request<{ settings: UserSettings }>('/user-settings', {
       method: 'PUT',
       body: JSON.stringify(payload),
     });

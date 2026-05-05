@@ -149,6 +149,15 @@ const QuotaTargetPayloadSchema = z.object({
   amount: z.number().min(0).max(1_000_000_000_000),
 });
 
+const UserProfileUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    password: z.string().min(6).max(128).optional(),
+  })
+  .refine((value) => Boolean(value.name || value.password), {
+    message: "At least one profile field is required",
+  });
+
 const DEFAULT_APP_SETTINGS = {
   organizationName: "Project Management",
   dashboardSubtitle: "Project and Schedule Management",
@@ -161,7 +170,38 @@ const DEFAULT_APP_SETTINGS = {
   reminderLeadDays: 3,
   enableDailySummary: false,
   dailySummaryTime: "09:00",
+  tabAccess: {
+    dashboard: [] as string[],
+    projects: [] as string[],
+    quota: [] as string[],
+    tasks: [] as string[],
+    av_schedule: ["av"],
+    users: [] as string[],
+    team_settings: [] as string[],
+    workspace_settings: [] as string[],
+  },
 };
+
+const DEFAULT_USER_SETTINGS = {
+  preferredTheme: "system" as "system" | "light" | "dark",
+  themePreset: "default" as "default" | "ocean" | "forest" | "sunset" | "slate",
+  timezone: "Asia/Manila",
+  dateFormat: "YYYY-MM-DD" as "YYYY-MM-DD" | "MMM dd, yyyy" | "dd/MM/yyyy",
+  emailNotificationsEnabled: true,
+  taskReminderEmailEnabled: true,
+  dailySummaryEmailEnabled: false,
+};
+
+const TabAccessSchema = z.object({
+  dashboard: z.array(z.string()).default(DEFAULT_APP_SETTINGS.tabAccess.dashboard),
+  projects: z.array(z.string()).default(DEFAULT_APP_SETTINGS.tabAccess.projects),
+  quota: z.array(z.string()).default(DEFAULT_APP_SETTINGS.tabAccess.quota),
+  tasks: z.array(z.string()).default(DEFAULT_APP_SETTINGS.tabAccess.tasks),
+  av_schedule: z.array(z.string()).default(DEFAULT_APP_SETTINGS.tabAccess.av_schedule),
+  users: z.array(z.string()).default(DEFAULT_APP_SETTINGS.tabAccess.users),
+  team_settings: z.array(z.string()).default(DEFAULT_APP_SETTINGS.tabAccess.team_settings),
+  workspace_settings: z.array(z.string()).default(DEFAULT_APP_SETTINGS.tabAccess.workspace_settings),
+});
 
 const AppSettingsPayloadSchema = z.object({
   organizationName: z.string().trim().min(1).max(120).default(DEFAULT_APP_SETTINGS.organizationName),
@@ -179,11 +219,26 @@ const AppSettingsPayloadSchema = z.object({
     .trim()
     .refine((value) => TIME_OF_DAY_PATTERN.test(value), "Daily summary time must use HH:mm format")
     .default(DEFAULT_APP_SETTINGS.dailySummaryTime),
+  tabAccess: TabAccessSchema.default(DEFAULT_APP_SETTINGS.tabAccess),
 });
 
 const AppSettingsStorageSchema = AppSettingsPayloadSchema.extend({
   updatedAt: z.string().optional().default(() => new Date().toISOString()),
   updatedBy: z.string().optional().default(""),
+});
+
+const UserSettingsPayloadSchema = z.object({
+  preferredTheme: z.enum(["system", "light", "dark"]).default(DEFAULT_USER_SETTINGS.preferredTheme),
+  themePreset: z.enum(["default", "ocean", "forest", "sunset", "slate"]).default(DEFAULT_USER_SETTINGS.themePreset),
+  timezone: z.string().trim().min(1).max(80).default(DEFAULT_USER_SETTINGS.timezone),
+  dateFormat: z.enum(["YYYY-MM-DD", "MMM dd, yyyy", "dd/MM/yyyy"]).default(DEFAULT_USER_SETTINGS.dateFormat),
+  emailNotificationsEnabled: z.boolean().default(DEFAULT_USER_SETTINGS.emailNotificationsEnabled),
+  taskReminderEmailEnabled: z.boolean().default(DEFAULT_USER_SETTINGS.taskReminderEmailEnabled),
+  dailySummaryEmailEnabled: z.boolean().default(DEFAULT_USER_SETTINGS.dailySummaryEmailEnabled),
+});
+
+const UserSettingsStorageSchema = UserSettingsPayloadSchema.extend({
+  updatedAt: z.string().optional().default(() => new Date().toISOString()),
 });
 
 function normalizeDate(value: unknown): string {
@@ -234,7 +289,8 @@ function normalizeStringArray(values: unknown[]): string[] {
   return Array.from(unique);
 }
 
-const DEFAULT_TEAMS = ["AV", "Project Manager"];
+const NEW_USERS_TEAM_NAME = "New Users";
+const DEFAULT_TEAMS = ["AV", "Project Manager", NEW_USERS_TEAM_NAME];
 const DEFAULT_TEAM_NAME_SET = new Set(
   DEFAULT_TEAMS.map((team) => normalizeTeamName(team).toLowerCase()),
 );
@@ -256,6 +312,38 @@ const getRoleFromUser = (user: any): AppRole => {
   return "user";
 };
 
+function normalizeRole(value: unknown): AppRole {
+  if (value === "admin" || value === "team_lead" || value === "user") return value;
+  return "user";
+}
+
+function normalizeUserMetadataTeams(metadata: any): string[] {
+  return normalizeStringArray([
+    ...(Array.isArray(metadata?.teams) ? metadata.teams : []),
+    typeof metadata?.team === "string" ? metadata.team : "",
+  ]);
+}
+
+function withDefaultTeamMetadata(baseMetadata: any, role: AppRole) {
+  if (role === "admin") {
+    return {
+      ...(baseMetadata || {}),
+      role,
+      teams: [],
+      team: "",
+    };
+  }
+
+  const existingTeams = normalizeUserMetadataTeams(baseMetadata);
+  const teams = existingTeams.length > 0 ? existingTeams : [NEW_USERS_TEAM_NAME];
+  return {
+    ...(baseMetadata || {}),
+    role,
+    teams,
+    team: teams[0] || NEW_USERS_TEAM_NAME,
+  };
+}
+
 const isUserActive = (user: any): boolean =>
   user?.user_metadata?.isActive !== false;
 
@@ -265,7 +353,7 @@ const getUserTeams = (user: any): string[] => {
     typeof user?.user_metadata?.team === "string" ? user.user_metadata.team : "",
   ]);
   if (teams.length > 0) return teams;
-  return user?.user_metadata?.role === "admin" ? [] : ["AV"];
+  return user?.user_metadata?.role === "admin" ? [] : [NEW_USERS_TEAM_NAME];
 };
 
 function resolveUserName(userId: string, directory: Record<string, string>, fallback = ""): string {
@@ -926,6 +1014,32 @@ function normalizeAppSettingsRecord(settings: any) {
     };
   }
 
+  const tabAccess = parsed.data.tabAccess || DEFAULT_APP_SETTINGS.tabAccess;
+  return {
+    ...parsed.data,
+    tabAccess: {
+      dashboard: normalizeStringArray(tabAccess.dashboard || []).map((team) => normalizeTeamName(team).toLowerCase()).filter(Boolean),
+      projects: normalizeStringArray(tabAccess.projects || []).map((team) => normalizeTeamName(team).toLowerCase()).filter(Boolean),
+      quota: normalizeStringArray(tabAccess.quota || []).map((team) => normalizeTeamName(team).toLowerCase()).filter(Boolean),
+      tasks: normalizeStringArray(tabAccess.tasks || []).map((team) => normalizeTeamName(team).toLowerCase()).filter(Boolean),
+      av_schedule: normalizeStringArray(tabAccess.av_schedule || []).map((team) => normalizeTeamName(team).toLowerCase()).filter(Boolean),
+      users: normalizeStringArray(tabAccess.users || []).map((team) => normalizeTeamName(team).toLowerCase()).filter(Boolean),
+      team_settings: normalizeStringArray(tabAccess.team_settings || []).map((team) => normalizeTeamName(team).toLowerCase()).filter(Boolean),
+      workspace_settings: normalizeStringArray(tabAccess.workspace_settings || []).map((team) => normalizeTeamName(team).toLowerCase()).filter(Boolean),
+    },
+  };
+}
+
+function normalizeUserSettingsRecord(settings: any) {
+  const source = unwrapStoredValue(settings) ?? settings;
+  const parsed = UserSettingsStorageSchema.safeParse(source);
+  if (!parsed.success) {
+    return {
+      ...DEFAULT_USER_SETTINGS,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
   return parsed.data;
 }
 
@@ -987,6 +1101,11 @@ async function readTeams() {
 async function readAppSettings() {
   const stored = await kv.get("settings:global");
   return normalizeAppSettingsRecord(stored);
+}
+
+async function readUserSettings(userId: string) {
+  const stored = await kv.get(`settings:user:${userId}`);
+  return normalizeUserSettingsRecord(stored);
 }
 
 async function readUserQuotaTarget(userId: string): Promise<number> {
@@ -1175,11 +1294,14 @@ async function replaceTeamInUsers(oldTeamName: string, nextTeamName: string | nu
       targetTeam,
     ]);
 
-    const metadata = {
-      ...(authUser.user_metadata || {}),
-      teams: replaced,
-      team: replaced[0] || "",
-    };
+    const metadata = withDefaultTeamMetadata(
+      {
+        ...(authUser.user_metadata || {}),
+        teams: replaced,
+        team: replaced[0] || "",
+      },
+      normalizeRole(authUser.user_metadata?.role),
+    );
     await supabase.auth.admin.updateUserById(authUser.id, {
       user_metadata: metadata,
     });
@@ -1205,11 +1327,14 @@ async function setTeamMembers(teamName: string, memberIds: string[]) {
       ? normalizeStringArray([...currentTeams, normalizedTeamName])
       : currentTeams.filter((team) => team !== normalizedTeamName);
 
-    const metadata = {
-      ...(authUser.user_metadata || {}),
-      teams: nextTeams,
-      team: nextTeams[0] || "",
-    };
+    const metadata = withDefaultTeamMetadata(
+      {
+        ...(authUser.user_metadata || {}),
+        teams: nextTeams,
+        team: nextTeams[0] || "",
+      },
+      normalizeRole(authUser.user_metadata?.role),
+    );
     await supabase.auth.admin.updateUserById(authUser.id, {
       user_metadata: metadata,
     });
@@ -1419,10 +1544,14 @@ app.post("/server/signup", async (c) => {
     }
 
     const { email, password, name } = parsed.data;
+    const userMetadata = withDefaultTeamMetadata(
+      { name, isActive: true },
+      "user",
+    );
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
-      user_metadata: { name, role: "user", isActive: true },
+      user_metadata: userMetadata,
       // Automatically confirm the user's email since an email server hasn't been configured.
       email_confirm: true
     });
@@ -1459,22 +1588,29 @@ app.post("/server/setup-demo", async (c) => {
     );
 
     if (existing?.id) {
-      await supabase.auth.admin.updateUserById(existing.id, {
-        password: demoPassword,
-        user_metadata: {
+      const refreshedMetadata = withDefaultTeamMetadata(
+        {
           ...(existing.user_metadata || {}),
           name: demoName,
-          role: "user",
           isActive: true,
         },
+        "user",
+      );
+      await supabase.auth.admin.updateUserById(existing.id, {
+        password: demoPassword,
+        user_metadata: refreshedMetadata,
       });
       return c.json({ message: 'Demo account already exists', exists: true });
     }
 
+    const demoMetadata = withDefaultTeamMetadata(
+      { name: demoName, isActive: true },
+      "user",
+    );
     const { data, error } = await supabase.auth.admin.createUser({
       email: demoEmail,
       password: demoPassword,
-      user_metadata: { name: demoName, role: "user", isActive: true },
+      user_metadata: demoMetadata,
       email_confirm: true
     });
 
@@ -1509,6 +1645,58 @@ app.get("/server/me", async (c) => {
   } catch (error) {
     console.error("Get me error:", error);
     return c.json({ error: "Failed to fetch profile" }, 500);
+  }
+});
+
+app.put("/server/me", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+
+    const parsed = UserProfileUpdateSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+
+    const current = await supabase.auth.admin.getUserById(user.id);
+    if (current.error || !current.data.user?.id) {
+      return c.json({ error: "User not found" }, 404);
+    }
+
+    const existingMetadata = current.data.user.user_metadata || {};
+    const nextMetadata = {
+      ...existingMetadata,
+      ...(parsed.data.name ? { name: parsed.data.name } : {}),
+    };
+
+    const updatePayload: { user_metadata: Record<string, unknown>; password?: string } = {
+      user_metadata: nextMetadata,
+    };
+    if (parsed.data.password) {
+      updatePayload.password = parsed.data.password;
+    }
+
+    const updated = await supabase.auth.admin.updateUserById(user.id, updatePayload);
+    if (updated.error) {
+      return c.json({ error: updated.error.message }, 400);
+    }
+
+    const refreshed = updated.data.user || current.data.user;
+    const teams = getUserTeams(refreshed);
+    return c.json({
+      user: {
+        id: refreshed.id,
+        email: refreshed.email || "",
+        name: refreshed.user_metadata?.name || "User",
+        role: getRoleFromUser(refreshed),
+        isActive: isUserActive(refreshed),
+        team: teams[0] || "",
+        teams,
+      },
+    });
+  } catch (error) {
+    console.error("Update me error:", error);
+    return c.json({ error: "Failed to update profile" }, 500);
   }
 });
 
@@ -1609,15 +1797,15 @@ app.post("/server/admin/users", async (c) => {
     }
 
     const payload = parsed.data;
+    const createdMetadata = withDefaultTeamMetadata(
+      { name: payload.fullName, isActive: payload.isActive },
+      payload.role,
+    );
     const created = await supabase.auth.admin.createUser({
       email: payload.email,
       password: payload.password,
       email_confirm: true,
-      user_metadata: {
-        name: payload.fullName,
-        role: payload.role,
-        isActive: payload.isActive,
-      },
+      user_metadata: createdMetadata,
     });
 
     if (created.error || !created.data.user?.id) {
@@ -1657,12 +1845,13 @@ app.put("/server/admin/users/:id", async (c) => {
     }
 
     const existingMetadata = current.data.user.user_metadata || {};
-    const nextMetadata = {
+    const nextRole = parsed.data.role ? normalizeRole(parsed.data.role) : normalizeRole(existingMetadata.role);
+    const mergedMetadata = {
       ...existingMetadata,
       ...(parsed.data.fullName ? { name: parsed.data.fullName } : {}),
-      ...(parsed.data.role ? { role: parsed.data.role } : {}),
       ...(typeof parsed.data.isActive === "boolean" ? { isActive: parsed.data.isActive } : {}),
     };
+    const nextMetadata = withDefaultTeamMetadata(mergedMetadata, nextRole);
 
     const updated = await supabase.auth.admin.updateUserById(userId, {
       user_metadata: nextMetadata,
@@ -1720,6 +1909,57 @@ app.delete("/server/admin/users/:id", async (c) => {
 });
 
 // ==================== SETTINGS ROUTES ====================
+
+app.get("/server/navigation-settings", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+
+    const settings = await readAppSettings();
+    return c.json({ tabAccess: settings.tabAccess || DEFAULT_APP_SETTINGS.tabAccess });
+  } catch (error) {
+    console.error("Get navigation settings error:", error);
+    return c.json({ error: "Failed to fetch navigation settings" }, 500);
+  }
+});
+
+app.get("/server/user-settings", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+
+    const settings = await readUserSettings(user.id);
+    return c.json({ settings });
+  } catch (error) {
+    console.error("Get user settings error:", error);
+    return c.json({ error: "Failed to fetch user settings" }, 500);
+  }
+});
+
+app.put("/server/user-settings", async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+
+    const parsed = UserSettingsPayloadSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+
+    const existing = await readUserSettings(user.id);
+    const nextSettings = normalizeUserSettingsRecord({
+      ...existing,
+      ...parsed.data,
+      updatedAt: new Date().toISOString(),
+    });
+
+    await kv.set(`settings:user:${user.id}`, nextSettings);
+    return c.json({ settings: nextSettings });
+  } catch (error) {
+    console.error("Update user settings error:", error);
+    return c.json({ error: "Failed to update user settings" }, 500);
+  }
+});
 
 app.get("/server/settings", async (c) => {
   try {

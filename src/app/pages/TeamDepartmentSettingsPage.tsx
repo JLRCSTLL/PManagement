@@ -24,7 +24,7 @@ interface Team {
   members: TeamMember[];
 }
 
-const PROTECTED_TEAM_NAMES = new Set(['av', 'project manager']);
+const PROTECTED_TEAM_NAMES = new Set(['av', 'project manager', 'new users']);
 
 function normalizeUser(raw: any): User | null {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return null;
