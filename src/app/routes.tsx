@@ -108,7 +108,7 @@ export const router = createBrowserRouter([
       {
         path: "tickets/dashboard",
         element: (
-          <ProtectedRoute>
+          <ProtectedRoute requiredTab="tickets_dashboard">
             <TicketDashboardPage />
           </ProtectedRoute>
         ),
@@ -116,7 +116,7 @@ export const router = createBrowserRouter([
       {
         path: "tickets/my",
         element: (
-          <ProtectedRoute>
+          <ProtectedRoute requiredTab="tickets_my">
             <MyTicketsPage />
           </ProtectedRoute>
         ),
@@ -124,7 +124,7 @@ export const router = createBrowserRouter([
       {
         path: "tickets/queue",
         element: (
-          <ProtectedRoute requiredRoles={["admin", "team_lead"]}>
+          <ProtectedRoute requiredRoles={["admin", "team_lead"]} requiredTab="tickets_queue">
             <TicketQueuePage />
           </ProtectedRoute>
         ),
@@ -132,7 +132,7 @@ export const router = createBrowserRouter([
       {
         path: "tickets/sla",
         element: (
-          <ProtectedRoute requiredRoles={["admin", "team_lead"]}>
+          <ProtectedRoute requiredRoles={["admin", "team_lead"]} requiredTab="tickets_sla">
             <TicketSlaQueuePage />
           </ProtectedRoute>
         ),
@@ -140,7 +140,7 @@ export const router = createBrowserRouter([
       {
         path: "tickets/create",
         element: (
-          <ProtectedRoute>
+          <ProtectedRoute requiredTab="tickets_my">
             <CreateTicketPage />
           </ProtectedRoute>
         ),
@@ -164,7 +164,7 @@ export const router = createBrowserRouter([
       {
         path: "settings/tickets",
         element: (
-          <ProtectedRoute requiredRole="admin">
+          <ProtectedRoute requiredRole="admin" requiredTab="tickets_settings">
             <TicketAdminSettingsPage />
           </ProtectedRoute>
         ),

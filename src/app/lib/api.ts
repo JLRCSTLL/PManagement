@@ -23,6 +23,11 @@ export interface AppSettings {
     projects: string[];
     quota: string[];
     tasks: string[];
+    tickets_dashboard: string[];
+    tickets_my: string[];
+    tickets_queue: string[];
+    tickets_sla: string[];
+    tickets_settings: string[];
     av_schedule: string[];
     users: string[];
     team_settings: string[];
